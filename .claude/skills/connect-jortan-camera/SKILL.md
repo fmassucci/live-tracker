@@ -8,6 +8,11 @@ description: Connect a Jortan Wi-Fi camera (Yoosee app, e.g. the dual-lens JT-86
 Learned on a JT-8695QJ on 2026-10-24. These cameras are set up with the Yoosee phone app. Their video is
 closed to other programs until the camera is on Wi-Fi and *NVR connection* is turned on.
 
+Jortan sells models built on different platforms, so first check that this one is a Yoosee camera: its box
+or manual names the Yoosee app, and before setup it shows a Wi-Fi network named `GW_AP_<number>`. A model
+made for another app (iCSee, V380, CamHi...) is set up differently and has a different address; ask which
+app its box names. Only the Portaria side (steps 4 and 5, and splitting a two-lens picture) is the same.
+
 The person types the camera password into the app's camera form themselves. If they share it in chat, you may
 write the address text for them; don't enter it anywhere or use it to connect.
 
