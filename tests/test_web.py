@@ -11,10 +11,27 @@ from portaria.web.app import create_app
 from portaria.web.common import recording_state
 
 
+class NoVision:
+    """The recognition service isn't running in tests."""
+
+    def status(self):
+        return None
+
+    def camera_status(self, camera_id):
+        return None
+
+    def frame(self, channel):
+        return None
+
+    def stream(self, channel):
+        return None
+
+
 @pytest.fixture
 def app(cfg):
     application = create_app(cfg)
     application.state.services.people._tools = FakeTools()  # no model files needed
+    application.state.services.vision = NoVision()
     return application
 
 
