@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Door camera options</title>
+<style>
+  :root {
+    color-scheme: light;
+    --canvas: #f2f3f5;
+    --surface: #ffffff;
+    --surface-2: #f6f7f8;
+    --line: #e3e5e9;
+    --line-strong: #cfd3da;
+    --ink: #15171c;
+    --ink-2: #5f6470;
+    --ink-3: #8c919b;
+    --orange: #f26b1d;
+    --orange-wash: #fff1e8;
+    --orange-ink: #b3410b;
+    --radius-panel: 14px;
+    --radius-control: 10px;
+    --font: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --canvas: #0e0f12;
+      --surface: #16181c;
+      --surface-2: #1c1f24;
+      --line: #262930;
+      --line-strong: #353943;
+      --ink: #ecedef;
+      --ink-2: #a2a7b1;
+      --ink-3: #6e737d;
+      --orange: #ff7a2e;
+      --orange-wash: #2a1a10;
+      --orange-ink: #ffa36b;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink);
+    background: var(--canvas);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--orange-ink); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+  code {
+    font-family: var(--mono); font-size: 13px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 1px 6px; overflow-wrap: anywhere;
+  }
+
+  main { max-width: 960px; margin: 0 auto; padding: 44px 16px 64px; }
+  .eyebrow { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--orange-ink); }
+  h1 { margin: 0 0 12px; font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; }
+  h2 { margin: 0 0 14px; font-size: 19px; line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; }
+  h3 { margin: 0; font-size: 16px; line-height: 1.3; font-weight: 600; }
+  .lede { max-width: 70ch; margin: 0 0 10px; font-size: 17px; }
+  .meta { margin: 0; font-size: 13px; color: var(--ink-3); }
+  section { margin-top: 38px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-panel); padding: 18px 20px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+  .grid .panel h3 { margin-bottom: 6px; font-size: 15px; }
+  .grid .panel p { margin: 0; color: var(--ink-2); }
+
+  /* The comparison scrolls inside its panel on a phone; the page itself never scrolls sideways. */
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+  table { width: 100%; min-width: 660px; border-collapse: collapse; }
+  th, td { padding: 12px 16px; text-align: left; vertical-align: top; }
+  thead th { font-size: 12.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; border-bottom: 1px solid var(--line); }
+  tbody tr + tr > * { border-top: 1px solid var(--line); }
+  tbody th { font-weight: 600; }
+  .nowrap { white-space: nowrap; }
+  .footnote { margin: 8px 2px 0; font-size: 13px; color: var(--ink-3); }
+
+  .cards { display: grid; gap: 14px; }
+  .card { display: grid; gap: 14px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  .card-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+    background: var(--surface-2); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .badge.pick { background: var(--orange-wash); color: var(--orange-ink); box-shadow: none; }
+  .price { font-size: 17px; font-weight: 600; white-space: nowrap; }
+  .specs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 18px; margin: 0; }
+  .specs dt { font-size: 13.5px; color: var(--ink-3); }
+  .specs dd { margin: 0; }
+  .card > p { margin: 0; color: var(--ink-2); }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .links a {
+    display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 12px;
+    border: 1px solid var(--line-strong); border-radius: var(--radius-control);
+    color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none;
+  }
+  .links a:hover { border-color: var(--orange); color: var(--orange-ink); }
+  .links small { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+
+  ul.points { margin: 0; padding-left: 20px; }
+  ul.points li + li { margin-top: 6px; }
+  .verdict { margin: 0 0 12px; font-weight: 600; }
+
+  footer { margin-top: 44px; font-size: 13.5px; color: var(--ink-2); }
+  footer ul { margin: 8px 0 0; padding-left: 20px; }
+  footer li + li { margin-top: 4px; }
+
+  @media (max-width: 560px) {
+    main { padding-top: 28px; }
+    h1 { font-size: 26px; }
+    .specs { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .specs dd + dt { margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">padaria-cameras · door camera</p>
+    <h1>IP cameras for the door</h1>
+    <p class="lede">Get a wired PoE camera (power and video over one network cable) that supports RTSP and ONVIF and is set up from a web browser. The app reads it directly, so nothing from the camera's maker has to run. An ESP32-CAM isn't a good door camera; keep the ESP32 for the lock relay.</p>
+    <p class="meta">Prices checked on Mercado Livre on 24 October 2026, when all of these were in stock. Prices change often.</p>
+  </header>
+
+  <section aria-labelledby="needs">
+    <h2 id="needs">What matters for this app</h2>
+    <div class="grid">
+      <div class="panel">
+        <h3>RTSP and ONVIF, set up in a browser</h3>
+        <p>Add the camera in Cameras, or with <em>Find cameras on this network</em>. Avoid cameras whose listing only mentions a phone app (Yoosee, iCSee, V380, Tuya/Smart Life, Xiaomi). Many have no RTSP, and on the rest it's unreliable.</p>
+      </div>
+      <div class="panel">
+        <h3>Cable beats Wi-Fi</h3>
+        <p>One cable carries power and video for up to 100 m, which suits a server far from the door. Wi-Fi works, but it drops frames.</p>
+      </div>
+      <div class="panel">
+        <h3>Distance</h3>
+        <p>The app ignores faces narrower than 80 px (<code>min_face_px</code>). With these wide lenses, people need to pass within about 1.5–2 m of the camera. Mount it at about head height near where people stop, not high in a corner.</p>
+      </div>
+      <div class="panel">
+        <h3>Light</h3>
+        <p>People arrive before sunrise. In the dark, cameras switch to black-and-white infrared, and recognition gets worse because the enrolled photos are in color. A lamp at the entrance helps more than extra megapixels. In daylight it flips: a camera facing a bright open doorway needs good backlight handling (WDR).</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="compare">
+    <h2 id="compare">Options</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Camera</th>
+            <th scope="col">Connection</th>
+            <th scope="col">Image</th>
+            <th scope="col">Face ≥ 80 px up to*</th>
+            <th scope="col">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Intelbras VIP 1230 B G4</th>
+            <td>Cable + PoE</td>
+            <td>2 MP, 82°, weak backlight handling</td>
+            <td>~2 m</td>
+            <td class="nowrap">R$ 349–370</td>
+          </tr>
+          <tr>
+            <th scope="row">Hikvision DS-2CD1043G2-I 2.8 mm</th>
+            <td>Cable + PoE</td>
+            <td>4 MP, 99°, good backlight handling (sellers' spec)</td>
+            <td>~2 m</td>
+            <td class="nowrap">R$ 589</td>
+          </tr>
+          <tr>
+            <th scope="row">Intelbras VIP 1230 W G4</th>
+            <td>Wi-Fi or cable, 12 V adapter</td>
+            <td>2 MP, 100°, microphone</td>
+            <td>~1.5 m</td>
+            <td class="nowrap">R$ 599</td>
+          </tr>
+          <tr>
+            <th scope="row">TP-Link Tapo C320WS</th>
+            <td>Wi-Fi or cable, 9 V adapter</td>
+            <td>2560×1440, 97°, 15 fps max</td>
+            <td>~2 m</td>
+            <td class="nowrap">R$ 199</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">* Estimated from the lens angle and resolution, assuming a face about 15 cm wide.</p>
+  </section>
+
+  <section aria-labelledby="cameras">
+    <h2 id="cameras">The four cameras</h2>
+    <div class="cards">
+
+      <article class="panel card">
+        <div class="card-head">
+          <div class="card-title"><h3>Intelbras VIP 1230 B G4</h3><span class="badge pick">Default pick</span></div>
+          <span class="price">R$ 349–370</span>
+        </div>
+        <dl class="specs">
+          <dt>Connection</dt><dd>Cable with PoE (802.3af), or a 12 V adapter</dd>
+          <dt>Image</dt><dd>2 MP (1920×1080), 3.6 mm lens, 82° wide</dd>
+          <dt>Backlight</dt><dd>Digital only (DWDR 60 dB): its weak spot</dd>
+          <dt>Setup</dt><dd>Web browser. RTSP, ONVIF Profiles S and T (Intelbras datasheet)</dd>
+          <dt>RTSP</dt><dd><code>rtsp://user:pass@IP:554/cam/realmonitor?channel=1&amp;subtype=0</code></dd>
+        </dl>
+        <p>Brazilian warranty and support, and the cheapest of the cable options.</p>
+        <div class="links">
+          <a href="https://www.mercadolivre.com.br/camera-de-seguranca-intelbras-vip-1230-b-g4-com-resolucao-2mp-brancopreto/p/MLB18940761" target="_blank" rel="noopener">Mercado Livre <small>MLB18940761</small></a>
+          <a href="https://www.mercadolivre.com.br/cmera-de-seguranca-intelbras-vip-1230-b-g4-serie-1000-com-resoluco-2mp-preto/p/MLB24241911" target="_blank" rel="noopener">Mercado Livre, official store <small>MLB24241911</small></a>
+        </div>
+      </article>
+
+      <article class="panel card">
+        <div class="card-head">
+          <div class="card-title"><h3>Hikvision DS-2CD1043G2-I (2.8 mm)</h3><span class="badge">For a bright doorway</span></div>
+          <span class="price">R$ 589</span>
+        </div>
+        <dl class="specs">
+          <dt>Connection</dt><dd>Cable with PoE</dd>
+          <dt>Image</dt><dd>4 MP (2560×1440), 2.8 mm lens, 99° wide</dd>
+          <dt>Backlight</dt><dd>120 dB WDR according to sellers' spec sheets; Hikvision's own sheet not checked</dd>
+          <dt>Setup</dt><dd>Web browser. ONVIF is switched on under Network → Advanced → Integration Protocol</dd>
+          <dt>RTSP</dt><dd><code>rtsp://user:pass@IP:554/Streaming/Channels/101</code></dd>
+        </dl>
+        <div class="links">
+          <a href="https://www.mercadolivre.com.br/cmera-ip-bullet-hikvision-ds-2cd1043g2-i-4-mpx-28-mm-poe-h265/p/MLB27469345" target="_blank" rel="noopener">Mercado Livre <small>MLB27469345</small></a>
+        </div>
+      </article>
+
+      <article class="panel card">
+        <div class="card-head">
+          <div class="card-title"><h3>Intelbras VIP 1230 W G4</h3><span class="badge">Wi-Fi, no app</span></div>
+          <span class="price">R$ 599</span>
+        </div>
+        <dl class="specs">
+          <dt>Connection</dt><dd>Wi-Fi (2.4 GHz) or cable. No PoE: needs a 12 V adapter and an outlet at the door</dd>
+          <dt>Image</dt><dd>2 MP, 2.8 mm lens, 100° wide; built-in microphone</dd>
+          <dt>Backlight</dt><dd>Digital only (BLC/HLC/DWDR)</dd>
+          <dt>Setup</dt><dd>Web browser. RTSP, ONVIF Profiles S, T and G (Intelbras datasheet)</dd>
+          <dt>RTSP</dt><dd><em>Find cameras on this network</em> lists its address</dd>
+        </dl>
+        <div class="links">
+          <a href="https://www.mercadolivre.com.br/camera-ip-wi-fi-bullet-intelbras-vip-1230w-g4-c-microfone/p/MLB24862818" target="_blank" rel="noopener">Mercado Livre <small>MLB24862818</small></a>
+        </div>
+      </article>
+
+      <article class="panel card">
+        <div class="card-head">
+          <div class="card-title"><h3>TP-Link Tapo C320WS</h3><span class="badge">Cheapest</span></div>
+          <span class="price">R$ 199</span>
+        </div>
+        <dl class="specs">
+          <dt>Connection</dt><dd>Wi-Fi (2.4 GHz) or cable. No PoE: 9 V adapter</dd>
+          <dt>Image</dt><dd>2560×1440 at up to 15 fps, 3.18 mm lens, 97° wide</dd>
+          <dt>Backlight</dt><dd>Not checked</dd>
+          <dt>Setup</dt><dd>The first setup needs the Tapo app and a TP-Link account, where you create the login RTSP uses. After that it works on the local network.</dd>
+          <dt>RTSP</dt><dd><code>rtsp://user:pass@IP:554/stream1</code> (<code>stream2</code> is the low-quality stream)</dd>
+        </dl>
+        <div class="links">
+          <a href="https://www.mercadolivre.com.br/camera-de-seguranca-wi-fi-externa-tp-link-tapo-c320ws-2k-4mp-ip66-branco/p/MLB19693785" target="_blank" rel="noopener">Mercado Livre, official store <small>MLB19693785</small></a>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section aria-labelledby="poe">
+    <h2 id="poe">Power over the cable</h2>
+    <div class="panel card">
+      <p>The two cable cameras take their power over the network cable (PoE). At the server end you need a PoE switch, or a PoE injector following the 802.3af standard. A TP-Link TL-POE150S or TL-POE160S costs about R$ 140–260.</p>
+      <div class="links">
+        <a href="https://lista.mercadolivre.com.br/fonte-poe-injetor-poe-tp-link-tl-poe150s" target="_blank" rel="noopener">Mercado Livre search <small>TL-POE150S</small></a>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="esp32">
+    <h2 id="esp32">ESP32-CAM</h2>
+    <div class="panel card">
+      <p class="verdict">Not for the door camera.</p>
+      <ul class="points">
+        <li>The problem isn't resolution; it's the sensor (OV2640). The image is noisy, it's poor in low light, and it handles backlight badly.</li>
+        <li>It only has 2.4 GHz Wi-Fi with a tiny antenna, and it's sensitive to its power supply.</li>
+        <li>It would likely plug into the app as it is: OpenCV can read its video stream (<code>http://IP:81/stream</code> in the standard example).</li>
+        <li>It isn't really cheaper: R$ 120 from an official store, against R$ 199 for the Tapo, which has a much better image.</li>
+        <li>The ESP32 is the right part for the door lock relay, as planned.</li>
+      </ul>
+      <div class="links">
+        <a href="https://www.mercadolivre.com.br/modulo-esp32-cam-com-cmera-ov2640-2mp/p/MLB41532517" target="_blank" rel="noopener">Mercado Livre, official store <small>MLB41532517</small></a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Sources</strong>
+    <ul>
+      <li><a href="https://backend.intelbras.com/sites/default/files/2023-03/Datasheet%20UNIFICADO%20-%20VIP%201230%20B.D.G4-v2.pdf" target="_blank" rel="noopener">Intelbras VIP 1230 B/D G4 datasheet</a></li>
+      <li><a href="https://backend.intelbras.com/sites/default/files/2024-11/Datasheet%20UNIFICADO%20-%20VIP%201230%20W%20G4%20-%20V4.pdf" target="_blank" rel="noopener">Intelbras VIP 1230 W G4 datasheet</a></li>
+      <li><a href="https://www.tapo.com/faq/724/" target="_blank" rel="noopener">Tapo RTSP and ONVIF FAQ</a></li>
+      <li><a href="https://www.tapo.com/uk/product/tapo-c320ws-security-camera/specs/" target="_blank" rel="noopener">Tapo C320WS specifications</a></li>
+      <li><a href="https://www.panacompu.com/panama/en/product-information/hikvision-ds-2cd1043g2-i28mm-ip-camera-for-indoors-and-outdoors-4mp-ethernet-poe-manual-angle-adjustment" target="_blank" rel="noopener">Hikvision DS-2CD1043G2-I reseller specifications</a></li>
+      <li><a href="https://morele.net/produkt/15484044/" target="_blank" rel="noopener">Hikvision 120 dB WDR figure (4 mm version)</a></li>
+    </ul>
+  </footer>
+</main>
+</body>
+</html>
