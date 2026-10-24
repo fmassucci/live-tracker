@@ -22,20 +22,20 @@
 {% else %}
 <div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if chosen.role == "door" and state in ("recording", "no-image") %}data-state-url="/cameras/{{ chosen.id }}/state"{% endif %}>
   {% if state == "stopped" %}
-  <div class="video-empty">
+  <div class="video-empty" data-waiting-for="{{ chosen.id }}">
     <p>{{ t("Recording is stopped: nobody is recognized at this door.") if chosen.role == "door" else t("This camera is turned off.") }}</p>
     {{ switch_button(chosen, "/live/" ~ chosen.id, t) }}
   </div>
   {% elif state == "service-down" %}
-  <div class="video-empty">
+  <div class="video-empty" data-waiting-for="{{ chosen.id }}">
     <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
     <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
   </div>
   {% else %}
-  <img src="/cameras/{{ chosen.id }}/stream" alt="{{ t('Live image from {name}', name=chosen.name) }}">
+  <img src="/cameras/{{ chosen.id }}/stream" data-stream-for="{{ chosen.id }}" alt="{{ t('Live image from {name}', name=chosen.name) }}">
   {% endif %}
   <div class="video-chips">
-    {{ camera_chip(state, t(recording_states[state]), "glass") }}
+    {{ camera_chip(state, t(recording_states[state]), "glass", chosen.id) }}
     <span class="glass">{{ chosen.name }}{% if state in ("recording", "live") %}, {{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}{% endif %}</span>
   </div>
   <p class="video-label" data-video-label aria-live="polite"></p>

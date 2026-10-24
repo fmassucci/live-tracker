@@ -31,6 +31,52 @@
     poll();
   }
 
+  // Recording chips follow their camera while the page is open: a webcam takes a moment to start.
+  // When a camera starts sending, its live video reconnects, or the page reloads to show it.
+  const sending = (state) => state === "recording" || state === "live";
+  const reconnect = (img) => {
+    img.src = `${img.src.split("?")[0]}?t=${Date.now()}`;
+  };
+  const known = {};
+  for (const chip of document.querySelectorAll("[data-recording-for]")) {
+    known[chip.dataset.recordingFor] = chip.dataset.state;
+  }
+  // every second while a camera that is on still has no image (it is starting), else every few
+  const nextCheck = () => (Object.values(known).includes("no-image") ? 1000 : 3000);
+  if (Object.keys(known).length) {
+    const follow = async () => {
+      try {
+        const response = await fetch("/cameras-states", { cache: "no-store" });
+        if (response.ok) {
+          const states = await response.json();
+          for (const [id, was] of Object.entries(known)) {
+            const now = states[id];
+            if (!now || now.state === was) continue;
+            known[id] = now.state;
+            for (const chip of document.querySelectorAll(`[data-recording-for="${id}"]`)) {
+              chip.classList.replace(`camera-state-${chip.dataset.state}`, `camera-state-${now.state}`);
+              chip.dataset.state = now.state;
+              chip.lastElementChild.textContent = now.label;
+            }
+            if (sending(now.state) && !sending(was)) {
+              if (document.querySelector(`[data-waiting-for="${id}"]`)) location.reload();
+              document.querySelectorAll(`img[data-stream-for="${id}"]`).forEach(reconnect);
+            }
+          }
+        }
+      } catch {
+        // the next round tries again
+      }
+      setTimeout(follow, nextCheck());
+    };
+    setTimeout(follow, nextCheck());
+  }
+
+  // A live video that couldn't load, because its camera was still starting, tries again.
+  for (const img of document.querySelectorAll("img[data-stream-for]")) {
+    img.addEventListener("error", () => setTimeout(() => reconnect(img), 3000));
+  }
+
   // Camera thumbnails: a fresh picture every few seconds.
   if (document.querySelector("img[data-refresh]")) {
     setInterval(() => {

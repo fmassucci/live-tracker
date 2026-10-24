@@ -17,9 +17,10 @@
 </div>
 {%- endmacro %}
 
-{# A camera's recording state (RECORDING_STATES in common.py); the dot pulses while it records. #}
-{% macro camera_chip(state, label, extra="") -%}
-<span class="camera-state camera-state-{{ state }} {{ extra }}"><span class="camera-dot"></span>{{ label }}</span>
+{# A camera's recording state (RECORDING_STATES in common.py); the dot pulses while it records.
+   With camera_id, the chip follows the camera while the page is open (static/app.js). #}
+{% macro camera_chip(state, label, extra="", camera_id="") -%}
+<span class="camera-state camera-state-{{ state }} {{ extra }}"{% if camera_id %} data-recording-for="{{ camera_id }}" data-state="{{ state }}"{% endif %}><span class="camera-dot"></span><span>{{ label }}</span></span>
 {%- endmacro %}
 
 {# Start or stop a camera, then come back to `next`. Door cameras record, so their buttons say so. #}

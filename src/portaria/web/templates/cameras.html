@@ -24,9 +24,9 @@
       {% if state in ("recording", "live") %}
       <img src="/cameras/{{ c.id }}/frame.jpg" data-refresh="/cameras/{{ c.id }}/frame.jpg" alt="{{ t('Image from {name}', name=c.name) }}">
       {% else %}
-      <div class="camera-thumb-empty">{{ t("No image") }}</div>
+      <div class="camera-thumb-empty" data-waiting-for="{{ c.id }}">{{ t("No image") }}</div>
       {% endif %}
-      {{ camera_chip(state, t(recording_states[state]), "glass") }}
+      {{ camera_chip(state, t(recording_states[state]), "glass", c.id) }}
     </div>
     <div class="camera-body">
       <h2>{{ c.name }}</h2>

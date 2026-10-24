@@ -14,7 +14,7 @@ from portaria import onvif
 from portaria.camera import probe, redact
 from portaria.db import CAMERAS_VERSION, Camera, audit, bump
 from portaria.web.common import (
-    KINDS, flash, fragment, page, recording_state, require_user, safe_next, services, translator,
+    KINDS, RECORDING_STATES, flash, fragment, page, recording_state, require_user, safe_next, services, translator,
 )
 
 router = APIRouter(dependencies=[Depends(require_user)])
@@ -165,6 +165,22 @@ def camera_search(request: Request, user: str = Form(""), password: str = Form("
                 error = "The camera refused the user or password."
         found.append({"ip": ip, "streams": [(n, _with_login(u, user, password)) for n, u in streams], "error": error})
     return fragment(request, "_camera_search.html", found=found, searched_with_user=bool(user))
+
+
+@router.get("/cameras-states")
+def camera_states(request: Request) -> JSONResponse:
+    """Every camera's recording state, so open pages follow a camera that starts, stops or reconnects."""
+    s = services(request)
+    with s.db.session() as session:
+        cameras = session.scalars(select(Camera)).all()
+    status = s.vision.status()
+    statuses = status.get("cameras", {}) if status else {}
+    t = translator(request)
+    states = {}
+    for camera in cameras:
+        state = recording_state(camera, statuses.get(str(camera.id)), status is not None)
+        states[str(camera.id)] = {"state": state, "label": t(RECORDING_STATES[state])}
+    return JSONResponse(states)
 
 
 @router.get("/cameras/{camera_id}/state")

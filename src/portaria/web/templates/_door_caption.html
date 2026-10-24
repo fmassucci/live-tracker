@@ -2,7 +2,7 @@
 {% from "_macros.html" import camera_chip %}
 <div class="video-chips" id="door-caption" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if door_camera %}
-  {{ camera_chip(door_state, t(recording_states[door_state]), "glass") }}
+  {{ camera_chip(door_state, t(recording_states[door_state]), "glass", door_camera.id) }}
   <span class="glass">{{ door_camera.name }}</span>
   {% endif %}
 </div>

@@ -26,12 +26,12 @@
         {{ switch_button(door_camera, "/", t) }}
       </div>
       {% elif door_state == "service-down" %}
-      <div class="video-empty">
+      <div class="video-empty" data-waiting-for="{{ door_camera.id }}">
         <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
         <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
       </div>
       {% else %}
-      <img src="/cameras/{{ door_camera.id }}/stream" alt="{{ t('Live image from {name}', name=door_camera.name) }}">
+      <img src="/cameras/{{ door_camera.id }}/stream" data-stream-for="{{ door_camera.id }}" alt="{{ t('Live image from {name}', name=door_camera.name) }}">
       {% endif %}
       {% include "_door_caption.html" %}
       <p class="video-label" data-video-label aria-live="polite"></p>

@@ -9,7 +9,7 @@
   </div>
   {% if camera and state %}
   <div class="actions">
-    {{ camera_chip(state, t(recording_states[state])) }}
+    {{ camera_chip(state, t(recording_states[state]), "", camera.id) }}
     {{ switch_button(camera, "/cameras/" ~ camera.id, t) }}
   </div>
   {% endif %}

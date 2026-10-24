@@ -153,6 +153,13 @@ def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
     assert client.post("/cameras/99/start").status_code == 404
 
 
+def test_open_pages_can_follow_every_camera(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Porta", url="0", role="door"))
+    states = client.get("/cameras-states").json()
+    assert states == {"1": {"state": "service-down", "label": "Serviço de reconhecimento parado"}}
+
+
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):
     assert client.get("/cameras/1/state").json() == {"tone": "idle", "label": ""}
 
