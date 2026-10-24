@@ -1,0 +1,52 @@
+# Copy to config.toml and adjust. Every key is optional; the values below are the defaults.
+# People, cameras and accounts are managed in the web UI. This file holds what the server needs to start.
+
+[camera]
+# Only used by `python -m portaria import` (to create the first camera) and as the default for `probe`.
+source = ""
+stale_after_s = 2.0
+reconnect_delay_s = 2.0
+
+[detection]
+detect_width = 640       # frames are downscaled to this width to find faces
+score_threshold = 0.8
+min_face_px = 80         # face width in the full-resolution frame
+max_yaw = 0.25           # head turn allowed, roughly 30 degrees
+min_sharpness = 30.0
+
+[recognition]
+# "auraface" (ResNet-100, more accurate) or "sface" (lightweight, for comparison).
+model = "auraface"
+# Cosine similarity needed to accept a match. It depends on the model: re-run
+# `python -m portaria evaluate` and adjust whenever you change models.
+accept_threshold = 0.45
+min_margin = 0.08        # best person must beat the runner-up by this much
+
+[decision]
+window_s = 1.5           # agreeing frames must fall within this window
+min_votes = 3
+rearm_after_s = 1.0      # the door must be clear this long before the same person is decided again
+person_cooldown_s = 5.0
+unknown_cooldown_s = 10.0
+unknown_after_s = 2.0    # a face must stay unmatched this long to be recorded as not recognized
+
+[door]
+# Only "shadow" exists for now: decisions are recorded and nothing is opened.
+mode = "shadow"
+
+[preview]
+# Local port where the recognition service shares video and status with the web UI.
+host = "127.0.0.1"
+port = 8080
+
+[web]
+host = "127.0.0.1"       # "0.0.0.0" to open the UI from other computers and the door tablet
+port = 8000
+language = "pt"          # "pt" or "en": default for new sessions, the door screen and video labels
+
+[storage]
+retention_days = 90      # records and their pictures older than this are deleted
+
+[paths]
+data_dir = "data"
+models_dir = "models"
