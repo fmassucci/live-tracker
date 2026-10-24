@@ -1,0 +1,25 @@
+<div class="field">
+  <label for="name">{{ t("Full name") }}</label>
+  <input type="text" id="name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="off">
+</div>
+<fieldset class="field">
+  <legend>{{ t("Type") }}</legend>
+  <div class="choices">
+    {% for key, label in categories.items() %}
+    <label class="choice"><input type="radio" name="category" value="{{ key }}" {% if (form.category or 'employee') == key %}checked{% endif %}>{{ t(label) }}</label>
+    {% endfor %}
+  </div>
+</fieldset>
+<div class="field">
+  <label for="job_title">{{ t("Job") }}</label>
+  <input type="text" id="job_title" name="job_title" value="{{ form.job_title or '' }}" maxlength="80">
+  <span class="hint">{{ t("For example: baker, cashier, delivery.") }}</span>
+</div>
+<div class="field">
+  <label for="notes">{{ t("Notes") }}</label>
+  <textarea id="notes" name="notes">{{ form.notes or '' }}</textarea>
+</div>
+<label class="check">
+  <input type="checkbox" name="door_access" value="true" {% if form.get('door_access', True) %}checked{% endif %}>
+  <span>{{ t("May open the staff door") }}<span class="hint">{{ t("Turn off for people who should be recognized but not let in.") }}</span></span>
+</label>

@@ -1,0 +1,18 @@
+{% macro icon(name, extra="") -%}
+<svg class="icon {{ extra }}" aria-hidden="true"><use href="/static/icons.svg#{{ name }}"></use></svg>
+{%- endmacro %}
+
+{% macro avatar(photo_id, name, extra="") -%}
+{% if photo_id %}<img class="avatar {{ extra }}" src="/photos/{{ photo_id }}/face.jpg?w=144" alt="" loading="lazy">
+{%- else %}<span class="avatar avatar-empty {{ extra }}" aria-hidden="true">{{ name[:1] }}</span>{% endif %}
+{%- endmacro %}
+
+{# A toast for the stack in the bottom-right corner (#toasts in base.html). The message is the call block.
+   hide_url: a standing notice that stays closed until the next sign-in. autohide: goes away by itself. #}
+{% macro toast(tone, icon_name, close_label, hide_url="", autohide=false) -%}
+<div class="toast toast-{{ tone }}" data-toast{% if hide_url %} data-hide-url="{{ hide_url }}"{% endif %}{% if autohide %} data-autohide{% endif %} role="{{ 'alert' if tone == 'bad' else 'status' }}">
+  <span class="toast-icon">{{ icon(icon_name) }}</span>
+  <p>{{ caller() }}</p>
+  <button type="button" class="toast-close" data-toast-close aria-label="{{ close_label }}" title="{{ close_label }}">{{ icon("close") }}</button>
+</div>
+{%- endmacro %}

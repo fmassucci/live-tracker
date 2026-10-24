@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ t("Records") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Records") }}</h1>
+    <p>{{ t("Every decision at the door, with the picture the camera took. Records are kept for {days} days.", days=retention) }}</p>
+  </div>
+</div>
+
+<form class="filters" method="get" action="/records">
+  <div class="field">
+    <label for="day">{{ t("Day") }}</label>
+    <input type="date" id="day" name="day" value="{{ day.isoformat() }}">
+  </div>
+  <div class="field">
+    <label for="kind">{{ t("Result") }}</label>
+    <select id="kind" name="kind">
+      <option value="">{{ t("All results") }}</option>
+      {% for key, label in kinds.items() %}<option value="{{ key }}" {% if kind == key %}selected{% endif %}>{{ t(label) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="person">{{ t("Person") }}</label>
+    <select id="person" name="person">
+      <option value="">{{ t("Everyone") }}</option>
+      {% for p in people %}<option value="{{ p.id }}" {% if person == p.id | string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <button class="button">{{ t("Show") }}</button>
+  <div class="day-nav">
+    <a class="button button-quiet button-small" href="?day={{ previous_day.isoformat() }}&kind={{ kind }}&person={{ person }}">{{ icon("chevron-left") }}{{ t("Previous day") }}</a>
+    {% if not is_today %}<a class="button button-quiet button-small" href="?day={{ next_day.isoformat() }}&kind={{ kind }}&person={{ person }}">{{ t("Next day") }}{{ icon("chevron-right") }}</a>{% endif %}
+  </div>
+</form>
+
+<h2 class="day-title">{{ t.long_date(day) }}</h2>
+{% if events %}
+<ul class="rows">
+  {% for e in events %}{% include "_record_row.html" %}{% endfor %}
+</ul>
+{% else %}
+<p class="empty">{{ t("No records for this day.") }}</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,25 @@
+{% set where = camera_names.get(e.camera_id, "") if e.camera_id else "" %}
+<li class="record" id="event-{{ e.id }}">
+  {% if e.snapshot %}
+  <a href="/records/{{ e.id }}.jpg" target="_blank" rel="noopener"><img src="/records/{{ e.id }}/face.jpg?w=96" alt="{{ t('Picture taken at {time}', time=e.at.strftime('%H:%M:%S')) }}" loading="lazy"></a>
+  {% else %}
+  <span class="record-no-picture" aria-hidden="true"></span>
+  {% endif %}
+  <time datetime="{{ e.at.isoformat() }}">{{ e.at.strftime("%H:%M") }}</time>
+  <div>
+    <p class="who">
+      {% if e.person_id %}<a href="/people/{{ e.person_id }}">{{ e.person_name }}</a>
+      {% elif e.person_name %}{{ e.person_name }}
+      {% else %}{{ t("Unknown person") }}{% endif %}
+    </p>
+    <p class="muted small">
+      {% if e.kind == "recognized" and where %}{{ where }}: {{ t(door_results[e.door]) }}
+      {% elif e.kind == "recognized" %}{{ t(door_results[e.door]) | capitalize }}
+      {% else %}{{ where }}{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    <span class="state {{ '' if e.kind == 'recognized' else 'state-bad' }}">{{ t(kinds[e.kind]) }}</span>
+    <span class="muted small">{{ t("Match {score}", score=t.number(e.score)) }}</span>
+  </div>
+</li>

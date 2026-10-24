@@ -1,0 +1,43 @@
+{% from "_macros.html" import icon %}
+<!doctype html>
+<html lang="{{ 'pt-BR' if lang == 'pt' else 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t("Sign in") }} | {{ brand.name }}</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+</head>
+<body>
+<main class="login">
+  <div class="login-box">
+    <div class="login-brand">
+      {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
+      <span>{{ brand.name }}</span>
+    </div>
+    <h1>{{ t("Sign in") }}</h1>
+    <p>{{ t("Use the account created for you.") }}</p>
+    {% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label for="username">{{ t("User name") }}</label>
+        <input type="text" id="username" name="username" value="{{ username }}" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">{{ t("Password") }}</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+      <button class="button">{{ t("Sign in") }}</button>
+    </form>
+    <div class="login-lang">
+      <form method="post" action="/language" class="lang-switch">
+        <input type="hidden" name="next" value="/login?next={{ next | urlencode }}">
+        <button name="lang" value="pt" aria-pressed="{{ 'true' if lang == 'pt' else 'false' }}">Português</button>
+        <button name="lang" value="en" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}">English</button>
+      </form>
+    </div>
+  </div>
+</main>
+</body>
+</html>

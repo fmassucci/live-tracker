@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, avatar %}
+{% block title %}{{ t("People") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("People") }}</h1>
+    <p>{{ t("Everyone the cameras can recognize. Each person needs face photos; three or more work best.") }}</p>
+  </div>
+  <a class="button" href="/people/new">{{ icon("plus") }}{{ t("Add a person") }}</a>
+</div>
+
+<form class="toolbar" method="get" action="/people" role="search">
+  <div class="search">
+    {{ icon("search") }}
+    <label class="visually-hidden" for="q">{{ t("Search by name") }}</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="{{ t('Search by name') }}">
+  </div>
+  <label class="check">
+    <input type="checkbox" name="show" value="all" {% if show == 'all' %}checked{% endif %}>
+    <span>{{ t("Include people with recognition turned off") }}</span>
+  </label>
+  <button class="button button-quiet button-small">{{ t("Search") }}</button>
+</form>
+
+{% if people %}
+<ul class="rows">
+  {% for p in people %}
+  {% set count = photos.get(p.id, 0) %}
+  <li class="person-row">
+    {{ avatar(avatars.get(p.id), p.name) }}
+    <div>
+      <a class="person-name" href="/people/{{ p.id }}">{{ p.name }}</a>
+      <p class="muted small">{{ t(categories[p.category]) }}{% if p.job_title %}, {{ p.job_title }}{% endif %}</p>
+    </div>
+    <div>
+      {% if count == 0 %}
+      <span class="state state-bad">{{ t("No photos") }}</span>
+      {% elif count < ready %}
+      <span class="state state-warn">{{ t("1 photo") if count == 1 else t("{count} photos", count=count) }}</span>
+      {% else %}
+      <span class="state">{{ t("{count} photos", count=count) }}</span>
+      {% endif %}
+    </div>
+    <div>
+      {% if not p.active %}
+      <span class="state state-off">{{ t("Recognition off") }}</span>
+      {% elif p.door_access %}
+      <span class="state">{{ t("Opens the door") }}</span>
+      {% else %}
+      <span class="state state-off">{{ t("Door stays closed") }}</span>
+      {% endif %}
+    </div>
+    <div class="small muted">
+      {% if last_seen.get(p.id) %}
+      {{ t("Last in: {when}", when=t.day_month(last_seen[p.id]) ~ " " ~ last_seen[p.id].strftime("%H:%M")) }}
+      {% else %}
+      {{ t("Not seen yet") }}
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% elif total == 0 %}
+<div class="empty">
+  <p>{{ t("Nobody is registered yet. Add the first person with a few face photos, and the door camera starts recognizing them.") }}</p>
+  <a class="button" href="/people/new">{{ icon("plus") }}{{ t("Add a person") }}</a>
+</div>
+{% else %}
+<p class="empty">{{ t("Nobody matches this search.") }}</p>
+{% endif %}
+{% endblock %}

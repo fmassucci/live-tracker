@@ -1,0 +1,36 @@
+{% from "_macros.html" import icon %}
+<!doctype html>
+<html lang="{{ 'pt-BR' if lang == 'pt' else 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ camera_name }} | {{ brand.name }}</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+</head>
+<body class="kiosk" data-tone="idle"
+      data-state-url="/door/state?camera={{ camera }}&key={{ key }}&lang={{ lang }}"
+      data-offline-title="{{ t('The door system is not working') }}"
+      data-offline-detail="{{ t('Use your key and tell the manager.') }}">
+<header class="kiosk-top">
+  <div class="kiosk-brand">
+    {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
+    <span>{{ brand.name }}</span>
+  </div>
+  <p class="kiosk-clock" id="clock" aria-hidden="true"></p>
+</header>
+<main class="kiosk-body">
+  <div class="kiosk-frame">
+    <img src="/door/stream?camera={{ camera }}&key={{ key }}" alt="{{ t('You, as the door camera sees you') }}">
+  </div>
+  <div aria-live="polite">
+    {{ icon("brand", "kiosk-state kiosk-state-idle") }}
+    {{ icon("check", "kiosk-state kiosk-state-ok") }}
+    {{ icon("cross", "kiosk-state kiosk-state-bad") }}
+    <h1 class="kiosk-title" id="title">{{ t("Look at the camera to come in") }}</h1>
+    <p class="kiosk-detail" id="detail"></p>
+  </div>
+</main>
+<script src="/static/kiosk.js?v={{ asset_version }}" defer></script>
+</body>
+</html>

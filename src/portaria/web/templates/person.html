@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, avatar %}
+{% block title %}{{ person.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="person-head">
+    {{ avatar(photos[0].id if photos else None, person.name) }}
+    <div>
+      <h1>{{ person.name }}</h1>
+      <p class="muted">{{ t(categories[person.category]) }}{% if person.job_title %}, {{ person.job_title }}{% endif %}</p>
+      <div class="person-states">
+        {% if not person.active %}
+        <span class="state state-off">{{ t("Recognition off") }}</span>
+        {% elif not photos %}
+        <span class="state state-bad">{{ t("Not recognized yet: add photos") }}</span>
+        {% elif photos | length < ready %}
+        <span class="state state-warn">{{ t("Recognized; more photos make it surer") }}</span>
+        {% else %}
+        <span class="state">{{ t("Ready to be recognized") }}</span>
+        {% endif %}
+        {% if person.door_access %}
+        <span class="state">{{ t("Opens the door") }}</span>
+        {% else %}
+        <span class="state state-off">{{ t("Door stays closed") }}</span>
+        {% endif %}
+        {% if person.informed_at %}
+        <span class="state">{{ t("Informed on {date}", date=person.informed_at.strftime("%d/%m/%Y")) }}</span>
+        {% else %}
+        <span class="state state-warn">{{ t("Not informed yet") }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <a class="button button-quiet" href="/people">{{ t("All people") }}</a>
+</div>
+
+<section class="section" id="photos" aria-labelledby="photos-title">
+  <div class="section-head">
+    <h2 id="photos-title">{{ t("Face photos") }}</h2>
+    <p class="muted small">{{ t("Photos: {count}. Recommended: {ready} or more.", count=photos | length, ready=ready) }}</p>
+  </div>
+  {% if photos %}
+  <ul class="photo-grid">
+    {% for photo in photos %}
+    <li>
+      <figure>
+        <img src="/photos/{{ photo.id }}.jpg?w=320" alt="{{ t('Photo of {name}', name=person.name) }}" loading="lazy">
+        <figcaption>
+          <span>{{ t(sources[photo.source]) }}, {{ photo.created_at.strftime("%d/%m/%Y") }}</span>
+          <form method="post" action="/photos/{{ photo.id }}/delete">
+            <button class="button button-quiet button-small">{{ icon("trash") }}{{ t("Remove") }}</button>
+          </form>
+        </figcaption>
+      </figure>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">{{ t("No photos yet. Add some from files, or take them with a camera while the person stands in front of it.") }}</p>
+  {% endif %}
+
+  {% if person.informed_at %}
+  <div class="add-photos">
+    <form method="post" action="/people/{{ person.id }}/photos" enctype="multipart/form-data" class="panel">
+      <h3>{{ t("Add photos from files") }}</h3>
+      {% include "_photo_picker.html" %}
+      <div class="actions" style="margin-top: 16px">
+        <button class="button" data-busy-text="{{ t('Saving...') }}">{{ t("Save photos") }}</button>
+      </div>
+    </form>
+    <form method="post" action="/people/{{ person.id }}/capture" class="panel">
+      <h3>{{ t("Take photos with a camera") }}</h3>
+      <p class="muted small" style="margin-bottom: 14px">{{ t("Ask the person to stand in front of the camera, look at it and turn their head a little. It takes up to 15 seconds.") }}</p>
+      {% if cameras %}
+      <div class="field">
+        <label for="camera_id">{{ t("Camera") }}</label>
+        <select id="camera_id" name="camera_id">
+          {% for c in cameras %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="button" data-busy-text="{{ t('Taking photos...') }}">{{ icon("camera") }}{{ t("Take photos") }}</button>
+      {% else %}
+      <p>{{ t("No camera is set up yet.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
+      {% endif %}
+    </form>
+  </div>
+  {% else %}
+  <div class="panel panel-notice">
+    <h3>{{ t("Before adding photos") }}</h3>
+    <p style="margin-bottom: 14px; max-width: 64ch">{{ t("Confirm that {name} was told that their face is used to recognize them at the entrance (LGPD).", name=person.name) }}</p>
+    <form method="post" action="/people/{{ person.id }}/informed">
+      <button class="button">{{ t("Confirm: the person was informed") }}</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section" id="details" aria-labelledby="details-title">
+  <form method="post" action="/people/{{ person.id }}" class="panel narrow">
+    <h2 id="details-title">{{ t("Details") }}</h2>
+    {% include "_person_fields.html" %}
+    <label class="check">
+      <input type="checkbox" name="active" value="true" {% if form.active %}checked{% endif %}>
+      <span>{{ t("Recognition on") }}<span class="hint">{{ t("Turn off to stop recognizing this person without deleting their photos.") }}</span></span>
+    </label>
+    <button class="button">{{ t("Save changes") }}</button>
+  </form>
+</section>
+
+<section class="section" id="history" aria-labelledby="history-title">
+  <div class="section-head"><h2 id="history-title">{{ t("Recent entries") }}</h2></div>
+  {% if events %}
+  <ul class="rows">
+    {% for e in events %}{% include "_record_row.html" %}{% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">{{ t("No entries recorded yet.") }}</p>
+  {% endif %}
+</section>
+
+<section class="section" id="delete">
+  <div class="danger-zone">
+    <h2>{{ t("Delete this person") }}</h2>
+    <p class="muted" style="margin: 6px 0 14px">{{ t("Deletes the person and all their photos. Past records keep the name until they expire.") }}</p>
+    <form method="post" action="/people/{{ person.id }}/delete">
+      <label class="check"><input type="checkbox" name="confirm" value="true" required><span>{{ t("I understand this can't be undone") }}</span></label>
+      <button class="button button-danger">{{ icon("trash") }}{{ t("Delete person and photos") }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/photos.js?v={{ asset_version }}" defer></script>{% endblock %}

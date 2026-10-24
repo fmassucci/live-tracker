@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ t("Edit camera") if camera else t("Add a camera") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Edit camera") if camera else t("Add a camera") }}</h1>
+    <p>{{ t("Most IP cameras have a video address (RTSP), like rtsp://user:password@192.168.1.50:554/onvif1. Test it before saving.") }}</p>
+  </div>
+</div>
+{% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
+
+<div class="form-grid">
+  <form method="post" action="{{ '/cameras/' ~ camera.id if camera else '/cameras/new' }}" class="panel">
+    <input type="hidden" name="camera_id" value="{{ camera.id if camera else '' }}">
+    <div class="field">
+      <label for="name">{{ t("Name") }}</label>
+      <input type="text" id="name" name="name" value="{{ form.name or '' }}" required maxlength="80" placeholder="{{ t('Staff entrance') }}">
+    </div>
+    <div class="field">
+      <label for="url">{{ t("Video address") }}</label>
+      <input type="text" id="url" name="url" value="{{ form.url or '' }}" required spellcheck="false" autocomplete="off">
+      {% if camera %}<span class="hint">{{ t("The password is hidden. Leave the address as it is to keep it.") }}</span>{% endif %}
+    </div>
+    <fieldset class="field">
+      <legend>{{ t("Used for") }}</legend>
+      <div class="choices">
+        {% for key, label in roles.items() %}
+        <label class="choice"><input type="radio" name="role" value="{{ key }}" {% if form.role == key %}checked{% endif %}>{{ t(label) }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="enabled" value="true" {% if form.enabled %}checked{% endif %}><span>{{ t("Camera on") }}</span></label>
+    <div class="actions">
+      <button class="button">{{ t("Save camera") }}</button>
+      <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>
+      <a class="button button-quiet" href="/cameras">{{ t("Cancel") }}</a>
+    </div>
+    <div id="test-result" class="test-result" aria-live="polite"></div>
+  </form>
+
+  <section class="panel" aria-labelledby="search-title">
+    <h2 id="search-title">{{ t("Find cameras on this network") }}</h2>
+    <p class="muted small" style="margin: -6px 0 16px">{{ t("Works with cameras that support ONVIF. With the camera's user and password, the system also lists its video addresses.") }}</p>
+    <form hx-post="/cameras-search" hx-target="#found" hx-indicator="#search-button">
+      <div class="field">
+        <label for="search-user">{{ t("Camera user") }}</label>
+        <input type="text" id="search-user" name="user" autocomplete="off" placeholder="admin">
+      </div>
+      <div class="field">
+        <label for="search-password">{{ t("Camera password") }}</label>
+        <input type="password" id="search-password" name="password" autocomplete="off">
+      </div>
+      <button class="button button-quiet" id="search-button">{{ icon("search") }}{{ t("Search the network") }}</button>
+    </form>
+    <div id="found" aria-live="polite"></div>
+  </section>
+</div>
+
+{% if camera %}
+<section class="section">
+  <div class="danger-zone">
+    <h2>{{ t("Remove this camera") }}</h2>
+    <p class="muted" style="margin: 6px 0 14px">{{ t("Its past records are kept.") }}</p>
+    <form method="post" action="/cameras/{{ camera.id }}/delete">
+      <button class="button button-danger">{{ icon("trash") }}{{ t("Remove camera") }}</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

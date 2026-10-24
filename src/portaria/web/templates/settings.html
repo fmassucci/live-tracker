@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ t("Settings") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ t("Settings") }}</h1></div>
+</div>
+
+<div class="settings">
+  <section class="settings-block" id="identity">
+    <div>
+      <h2>{{ t("Name and logo") }}</h2>
+      <p>{{ t("Shown at the top of every page, on the sign-in page and on the door screen.") }}</p>
+    </div>
+    <div>
+      <div class="logo-sample" aria-hidden="true">
+        {% if brand.logo %}<img class="brand-logo" src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
+        <span>{{ brand.name }}</span>
+      </div>
+      <form method="post" action="/settings/identity" class="field">
+        <label for="display_name">{{ t("Name shown") }}</label>
+        <div class="copy-field">
+          <input type="text" id="display_name" name="display_name" value="{{ display_name }}" maxlength="60" placeholder="Portaria">
+          <button class="button">{{ t("Save") }}</button>
+        </div>
+      </form>
+      <form method="post" action="/settings/logo" enctype="multipart/form-data" class="field">
+        <span class="field-label">{{ t("Logo") }}</span>
+        <div class="actions">
+          <label class="button button-quiet">
+            {{ icon("upload") }}{{ t("Choose image") }}
+            <input class="visually-hidden" type="file" name="logo" accept="image/png,image/jpeg,image/webp" required data-file-name="logo-name">
+          </label>
+          <span id="logo-name" class="muted small">{{ t("No image chosen") }}</span>
+        </div>
+        <span class="hint">{{ t("PNG or JPG. Square or wide, at least 200 pixels tall.") }}</span>
+        <div class="actions">
+          <button class="button">{{ t("Upload logo") }}</button>
+          {% if brand.logo %}<button class="button button-quiet" formaction="/settings/logo/remove" formnovalidate>{{ t("Remove logo") }}</button>{% endif %}
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="settings-block" id="door-screen">
+    <div>
+      <h2>{{ t("Door screen") }}</h2>
+      <p>{{ t("Open this address on the tablet at the entrance: it tells people whether they were recognized. Anyone with the address sees the door camera, so keep it private.") }}</p>
+    </div>
+    <div>
+      {% for c in door_cameras %}
+      <div class="field">
+        <label for="door-{{ c.id }}">{{ c.name }}</label>
+        <div class="copy-field">
+          <input type="text" id="door-{{ c.id }}" value="{{ base_url }}/door?camera={{ c.id }}&key={{ door_key }}" readonly>
+          <button type="button" class="button button-quiet" data-copy="door-{{ c.id }}" data-copied="{{ t('Copied') }}">{{ icon("copy") }}{{ t("Copy") }}</button>
+          <a class="button button-quiet" href="/door?camera={{ c.id }}&key={{ door_key }}" target="_blank" rel="noopener">{{ icon("external") }}{{ t("Open") }}</a>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted">{{ t("Add a door camera first.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
+      {% endfor %}
+      {% if door_cameras %}
+      <form method="post" action="/settings/door-screen/new-key">
+        <button class="button button-quiet button-small">{{ t("Create a new address") }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="settings-block" id="accounts">
+    <div>
+      <h2>{{ t("Accounts") }}</h2>
+      <p>{{ t("Who can sign in here. Everyone has the same access.") }}</p>
+    </div>
+    <div>
+      <ul class="user-list">
+        {% for u in users %}
+        <li>
+          <span>{{ u.username }}{% if u.username == user %} ({{ t("you") }}){% endif %}</span>
+          <span class="muted small">
+            {% if u.last_login_at %}{{ t("Last sign-in: {when}", when=t.day_month(u.last_login_at) ~ " " ~ u.last_login_at.strftime("%H:%M")) }}{% else %}{{ t("Never signed in") }}{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="/settings/password" class="subpanel">
+        <h3>{{ t("Change my password") }}</h3>
+        <div class="field">
+          <label for="change-password">{{ t("New password") }}</label>
+          <input type="password" id="change-password" name="password" required minlength="8" autocomplete="new-password">
+          <span class="hint">{{ t("At least 8 characters.") }}</span>
+        </div>
+        <div class="field">
+          <label for="change-password-again">{{ t("Password again") }}</label>
+          <input type="password" id="change-password-again" name="password_again" required minlength="8" autocomplete="new-password">
+        </div>
+        <button class="button">{{ t("Change password") }}</button>
+      </form>
+      <form method="post" action="/settings/users" class="subpanel" style="margin-top: 12px">
+        <h3>{{ t("Add an account") }}</h3>
+        <div class="field">
+          <label for="new-username">{{ t("User name") }}</label>
+          <input type="text" id="new-username" name="username" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="new-password">{{ t("Password") }}</label>
+          <input type="password" id="new-password" name="password" required minlength="8" autocomplete="new-password">
+          <span class="hint">{{ t("At least 8 characters.") }}</span>
+        </div>
+        <button class="button button-quiet">{{ t("Add account") }}</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="settings-block" id="system">
+    <div>
+      <h2>{{ t("System") }}</h2>
+      <p>{{ t("Set in config.toml on the server.") }}</p>
+    </div>
+    <dl class="facts">
+      <dt>{{ t("Door") }}</dt>
+      <dd>{{ t("Test mode: decisions are only recorded") if cfg.door.mode == "shadow" else t("Opens for recognized people") }}</dd>
+      <dt>{{ t("Recognition model") }}</dt>
+      <dd>{{ cfg.recognition.model }}</dd>
+      <dt>{{ t("Records kept for") }}</dt>
+      <dd>{{ t("{days} days", days=cfg.storage.retention_days) }}</dd>
+      <dt>{{ t("Default language") }}</dt>
+      <dd>{{ "Português" if cfg.web.language == "pt" else "English" }}</dd>
+    </dl>
+  </section>
+</div>
+{% endblock %}

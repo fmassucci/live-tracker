@@ -1,0 +1,23 @@
+{# Photo picker: drop or choose photos; each one is checked as soon as it is chosen (static/photos.js). #}
+{% from "_macros.html" import icon %}
+<div class="picker" data-picker
+     data-check-url="/people/check-photo"
+     {% if person %}data-person-id="{{ person.id }}"{% endif %}
+     data-checking="{{ t('Checking...') }}"
+     data-remove="{{ t('Remove') }}"
+     data-failed="{{ t('Could not check this photo now. It is checked again when you save.') }}"
+     data-informed-required="{{ t('Confirm that the person was told how their face is used before adding photos.') }}">
+  {{ icon("upload", "picker-icon") }}
+  <p><strong>{{ t("Drop photos here") }}</strong></p>
+  <p class="muted small">{{ t("or choose them from this computer. On a phone you can take them with the camera.") }}</p>
+  <label class="button button-quiet">
+    {{ t("Choose photos") }}
+    <input class="visually-hidden" type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple data-picker-input>
+  </label>
+  <ul class="tiles" data-picker-tiles aria-live="polite"></ul>
+</div>
+<ul class="tips">
+  <li>{{ icon("check") }}<span>{{ t("3 to 5 photos, facing the camera, in good light.") }}</span></li>
+  <li>{{ icon("check") }}<span>{{ t("Only this person in the photo, no sunglasses.") }}</span></li>
+  <li>{{ icon("check") }}<span>{{ t("If they wear a cap or hairnet at work, add a photo with it.") }}</span></li>
+</ul>

@@ -1,0 +1,35 @@
+{% from "_macros.html" import avatar %}
+<section class="panel entries" id="entries" aria-labelledby="entries-title" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <div class="panel-head">
+    <h2 id="entries-title">{{ t("Entries today") }}</h2>
+    <span class="count" title="{{ t('In: {count}', count=entries | length) }}">{{ entries | length }}</span>
+  </div>
+  {% if entries %}
+  <ol class="entry-list">
+    {% for e in entries %}
+    <li class="entry{% if e.first >= just_now %} is-new{% endif %}">
+      {{ avatar(avatars.get(e.person_id), e.name) }}
+      <div>
+        {% if e.person_id %}<a class="entry-name" href="/people/{{ e.person_id }}">{{ e.name }}</a>{% else %}<span class="entry-name">{{ e.name }}</span>{% endif %}
+        {% if e.visits > 1 %}
+        <span class="entry-meta">{{ t("Last seen at {time}", time=e.last.strftime("%H:%M")) }}</span>
+        {% elif e.job %}
+        <span class="entry-meta">{{ e.job }}</span>
+        {% endif %}
+      </div>
+      <time class="entry-time" datetime="{{ e.first.isoformat() }}">{{ e.first.strftime("%H:%M") }}</time>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="entries-empty">{{ t("Nobody has come in yet today. Names appear here as the door camera recognizes people.") }}</p>
+  {% endif %}
+  {% if not_in %}
+  <div class="absent">
+    <h3>{{ t("Not in yet") }} <span class="count">{{ not_in | length }}</span></h3>
+    <ul>
+      {% for p in not_in %}<li>{{ avatar(avatars.get(p.id), p.name) }}{{ p.name }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>

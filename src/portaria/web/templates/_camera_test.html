@@ -1,0 +1,10 @@
+{# Result of "Test connection": the message goes to the toasts, the test picture stays under the form. #}
+{% from "_macros.html" import toast %}
+<div hx-swap-oob="beforeend:#toasts">
+  {% if error %}
+  {% call toast("bad", "alert", t("Close")) %}{{ t(error) }}{% endcall %}
+  {% else %}
+  {% call toast("ok", "check", t("Close"), autohide=true) %}{{ t("Connected: {size}, {codec}, {fps} frames per second.", size=info.size, codec=info.codec, fps=t.number(info.measured_fps, 1)) }}{% endcall %}
+  {% endif %}
+</div>
+{% if not error and image %}<img src="data:image/jpeg;base64,{{ image }}" alt="{{ t('Test picture from the camera') }}">{% endif %}

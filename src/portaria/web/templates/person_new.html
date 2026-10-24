@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ t("Add a person") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Add a person") }}</h1>
+    <p>{{ t("Register someone the cameras should recognize. You can add more photos later.") }}</p>
+  </div>
+</div>
+{% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
+<form method="post" action="/people/new" enctype="multipart/form-data">
+  <div class="form-grid">
+    <section class="panel" aria-labelledby="details-title">
+      <h2 id="details-title">{{ t("Details") }}</h2>
+      {% include "_person_fields.html" %}
+      {% include "_informed_check.html" %}
+    </section>
+    <section class="panel" aria-labelledby="photos-title">
+      <h2 id="photos-title">{{ t("Face photos") }}</h2>
+      {% include "_photo_picker.html" %}
+    </section>
+  </div>
+  <div class="form-actions">
+    <button class="button" data-busy-text="{{ t('Saving...') }}">{{ t("Save person") }}</button>
+    <a class="button button-quiet" href="/people">{{ t("Cancel") }}</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/photos.js?v={{ asset_version }}" defer></script>{% endblock %}

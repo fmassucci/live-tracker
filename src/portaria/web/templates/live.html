@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ t("Live") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Live") }}</h1>
+    <p>{{ t("What the cameras see now. Boxes mark faces: green when recognized, red when not, yellow when the face can't be used yet.") }}</p>
+  </div>
+  <a class="button button-quiet" href="/cameras">{{ t("All cameras") }}</a>
+</div>
+{% if cameras | length > 1 %}
+<nav class="tabs" aria-label="{{ t('Cameras') }}">
+  {% for c in cameras %}<a href="/live/{{ c.id }}" {% if chosen and c.id == chosen.id %}aria-current="page"{% endif %}>{{ c.name }}</a>{% endfor %}
+</nav>
+{% endif %}
+{% if not chosen %}
+<div class="empty">
+  <p>{{ t("No cameras yet.") }}</p>
+  <a class="button" href="/cameras/new">{{ t("Add a camera") }}</a>
+</div>
+{% else %}
+{% set sending = service_up and camera_status and camera_status.online %}
+<div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if service_up and chosen.role == "door" %}data-state-url="/cameras/{{ chosen.id }}/state"{% endif %}>
+  {% if service_up %}
+  <img src="/cameras/{{ chosen.id }}/stream" alt="{{ t('Live image from {name}', name=chosen.name) }}">
+  {% else %}
+  <div class="video-empty">
+    <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
+    <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
+  </div>
+  {% endif %}
+  <div class="video-chips">
+    <span class="glass"><span class="live-dot{% if not sending %} is-off{% endif %}"></span>{{ chosen.name }}</span>
+    {% if sending %}<span class="glass">{{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}</span>{% endif %}
+  </div>
+  <p class="video-label" data-video-label aria-live="polite"></p>
+</div>
+{% endif %}
+{% endblock %}

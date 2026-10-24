@@ -1,0 +1,31 @@
+{% from "_macros.html" import toast %}
+{% if not found %}
+<div hx-swap-oob="beforeend:#toasts">
+  {% call toast("warn", "alert", t("Close")) %}{{ t("No camera answered. Check that it is on the same network and that ONVIF is on in its app.") }}{% endcall %}
+</div>
+{% else %}
+<ul class="found">
+  {% for cam in found %}
+  <li>
+    <strong>{{ cam.ip }}</strong>
+    {% if cam.error %}
+    <p class="muted small">{{ t(cam.error) }}</p>
+    {% elif cam.streams %}
+    <ul class="rows" style="margin-top: 8px">
+      {% for name, url in cam.streams %}
+      <li style="padding: 8px 0">
+        <p class="small">{{ name }}</p>
+        <code>{{ url | redact }}</code>
+        <button type="button" class="button button-quiet button-small" data-use-url="{{ url }}">{{ t("Use this address") }}</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% elif searched_with_user %}
+    <p class="muted small">{{ t("The camera didn't list any video address.") }}</p>
+    {% else %}
+    <p class="muted small">{{ t("Fill in the camera user and password to see its video addresses.") }}</p>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

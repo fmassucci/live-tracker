@@ -1,0 +1,4 @@
+<label class="check">
+  <input type="checkbox" name="informed" value="true" {% if form and form.informed %}checked{% endif %}>
+  <span>{{ t("The person was told that their face is used to recognize them at the entrance") }}<span class="hint">{{ t("Required before saving photos (LGPD).") }}</span></span>
+</label>

@@ -1,0 +1,63 @@
+{% from "_macros.html" import icon, toast %}
+<!doctype html>
+<html lang="{{ 'pt-BR' if lang == 'pt' else 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} | {{ brand.name }}</title>
+<link rel="preload" href="/static/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+<script src="/static/htmx.min.js?v={{ asset_version }}" defer></script>
+<script src="/static/app.js?v={{ asset_version }}" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      {% if brand.logo %}<img class="brand-logo" src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
+      <span>{{ brand.name }}</span>
+    </a>
+    <nav class="nav" aria-label="{{ t('Main menu') }}">
+      <a href="/" {% if section == 'today' %}aria-current="page"{% endif %}>{{ icon("today") }}<span>{{ t("Today") }}</span></a>
+      <a href="/people" {% if section == 'people' %}aria-current="page"{% endif %}>{{ icon("people") }}<span>{{ t("People") }}</span></a>
+      <a href="/records" {% if section == 'records' %}aria-current="page"{% endif %}>{{ icon("records") }}<span>{{ t("Records") }}</span></a>
+      <a href="/cameras" {% if section == 'cameras' %}aria-current="page"{% endif %}>{{ icon("cameras") }}<span>{{ t("Cameras") }}</span></a>
+      <a href="/settings" {% if section == 'settings' %}aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ t("Settings") }}</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <form method="post" action="/language" class="lang-switch">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button name="lang" value="pt" aria-pressed="{{ 'true' if lang == 'pt' else 'false' }}" title="Português">PT</button>
+        <button name="lang" value="en" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}" title="English">EN</button>
+      </form>
+      <div class="account">
+        <span class="account-initial" aria-hidden="true">{{ (user or "?")[:1] }}</span>
+        <span class="account-name">{{ user }}</span>
+        <form method="post" action="/logout">
+          <button class="icon-button" title="{{ t('Sign out') }}" aria-label="{{ t('Sign out') }}">{{ icon("logout") }}</button>
+        </form>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <main class="page">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite">
+  {% if default_password and "default-password" not in hidden_notices %}
+  {% call toast("bad", "shield", t("Close"), hide_url="/notices/default-password/hide") %}{{ t("You signed in with the default password, admin. Anyone who knows it can see the faces stored here.") }} <a href="/settings#accounts">{{ t("Change it now") }}</a>{% endcall %}
+  {% endif %}
+  {% if door_mode == "shadow" and "test-mode" not in hidden_notices %}
+  {% call toast("warn", "info", t("Close"), hide_url="/notices/test-mode/hide") %}{{ t("Test mode: the door does not open. Decisions are only recorded.") }}{% endcall %}
+  {% endif %}
+  {% block toasts %}{% endblock %}
+  {% for message in flashes %}
+  {% call toast(message.tone, "check" if message.tone == "ok" else "alert", t("Close"), autohide=message.tone == "ok") %}{{ t(message.text, **message["values"]) }}{% endcall %}
+  {% endfor %}
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

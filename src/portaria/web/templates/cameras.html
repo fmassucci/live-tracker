@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, toast %}
+{% block title %}{{ t("Cameras") }}{% endblock %}
+{% block toasts %}
+{% if not service_up %}
+{% call toast("bad", "alert", t("Close")) %}{{ t("The recognition service is not running, so there is no image. Start it on the server with: python -m portaria run") }}{% endcall %}
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Cameras") }}</h1>
+    <p>{{ t("The cameras the system watches. Door cameras recognize people; the others only show the image.") }}</p>
+  </div>
+  <a class="button" href="/cameras/new">{{ icon("plus") }}{{ t("Add a camera") }}</a>
+</div>
+{% if cameras %}
+<ul class="camera-grid">
+  {% for c in cameras %}
+  {% set st = statuses.get(c.id | string) %}
+  {% set sending = st and st.online %}
+  <li class="camera-card">
+    <div class="camera-thumb">
+      {% if sending %}
+      <img src="/cameras/{{ c.id }}/frame.jpg" data-refresh="/cameras/{{ c.id }}/frame.jpg" alt="{{ t('Image from {name}', name=c.name) }}">
+      {% else %}
+      <div class="camera-thumb-empty">{{ t("No image") }}</div>
+      {% endif %}
+      <span class="glass"><span class="live-dot{% if not sending %} is-off{% endif %}"></span>{{ t("Online") if sending else t("Turned off") if not c.enabled else t("No image") }}</span>
+    </div>
+    <div class="camera-body">
+      <h2>{{ c.name }}</h2>
+      <div class="camera-meta">
+        <span>{{ t(roles[c.role]) }}</span>
+        {% if sending %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
+      </div>
+      {% if c.enabled and service_up and not sending %}
+      <p class="small muted">{{ t("Check the camera's power, network and address.") }}</p>
+      {% endif %}
+      <div class="actions">
+        <a class="button button-small" href="/live/{{ c.id }}">{{ t("Watch live") }}</a>
+        <a class="button button-quiet button-small" href="/cameras/{{ c.id }}">{{ icon("pencil") }}{{ t("Edit") }}</a>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">
+  <p>{{ t("No cameras yet. Add the door camera with its video address (RTSP); you can test it before saving.") }}</p>
+  <a class="button" href="/cameras/new">{{ icon("plus") }}{{ t("Add a camera") }}</a>
+</div>
+{% endif %}
+{% endblock %}
