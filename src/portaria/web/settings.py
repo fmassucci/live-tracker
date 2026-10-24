@@ -27,7 +27,7 @@ def settings_page(request: Request) -> HTMLResponse:
     with s.db.session() as session:
         display_name = get_setting(session, "display_name") or ""
         door_key = get_setting(session, "door_screen_key")
-        door_cameras = session.scalars(select(Camera).where(Camera.role == "door").order_by(Camera.name)).all()
+        door_cameras = session.scalars(select(Camera).where(Camera.device == "door").order_by(Camera.name)).all()
         users = session.scalars(select(User).order_by(User.username)).all()
     return page(request, "settings.html", section="settings", display_name=display_name, door_key=door_key,
                 door_cameras=door_cameras, users=users, cfg=s.cfg, base_url=str(request.base_url).rstrip("/"))

@@ -31,8 +31,9 @@
     <div class="camera-body">
       <h2>{{ c.name }}</h2>
       <div class="camera-meta">
-        <span>{{ t(roles[c.role]) }}</span>
-        {% if state in ("recording", "live") %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
+        <span>{{ t(analyses[c.analysis]) }}</span>
+        {% if c.device == "door" %}<span>{{ t("Opens the door") }}</span>{% endif %}
+        {% if state == "recording" %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
       </div>
       {% if state == "no-image" %}
       <p class="small muted">{{ t("Check the camera's power, network and address.") }}</p>

@@ -133,17 +133,27 @@ def test_logo_upload_is_stored_as_png_and_shown(client, cfg):
 
 
 def test_recording_state_says_why_a_camera_is_not_recording():
-    door = SimpleNamespace(enabled=True, role="door")
-    assert recording_state(door, {"online": True}, service_up=True) == "recording"
-    assert recording_state(door, {"online": False}, service_up=True) == "no-image"
-    assert recording_state(door, None, service_up=False) == "service-down"
-    assert recording_state(SimpleNamespace(enabled=False, role="door"), {"online": True}, service_up=True) == "stopped"
-    assert recording_state(SimpleNamespace(enabled=True, role="view"), {"online": True}, service_up=True) == "live"
+    camera = SimpleNamespace(enabled=True)
+    assert recording_state(camera, {"online": True}, service_up=True) == "recording"
+    assert recording_state(camera, {"online": False}, service_up=True) == "no-image"
+    assert recording_state(camera, None, service_up=False) == "service-down"
+    assert recording_state(SimpleNamespace(enabled=False), {"online": True}, service_up=True) == "stopped"
+
+
+def test_a_camera_has_an_ai_model_and_an_attached_device(client, app):
+    form = client.get("/cameras/new").text
+    assert "Modelo de IA" in form and "Reconhecimento facial" in form and "Dispositivo ligado" in form
+    client.post("/cameras/new", data={"name": "Cozinha", "url": "0", "analysis": "faces", "device": ""})
+    cameras = client.post("/cameras/new", data={"name": "Porta", "url": "1", "analysis": "faces", "device": "door"})
+    assert cameras.text.count("Parar gravação") == 2  # every camera records
+    assert cameras.text.count("Abre a porta") == 1
+    with app.state.services.db.session() as session:
+        assert [c.device for c in session.scalars(select(Camera).order_by(Camera.id))] == ["", "door"]
 
 
 def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Porta", url="0", role="door"))
+        session.add(Camera(name="Porta", url="0", device="door"))
     assert "Parar gravação" in client.get("/cameras").text
     today = client.post("/cameras/1/stop", data={"next": "/"})  # follows the redirect back to Today
     assert "Gravação parada: Porta." in today.text
@@ -168,7 +178,7 @@ class SeenVision(NoVision):
 def test_a_one_lens_camera_is_not_offered_a_split(client, app):
     app.state.services.vision = SeenVision("1920x1080")
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.38:554/onvif1", role="door"))
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.38:554/onvif1", device="door"))
     edit = client.get("/cameras/1").text
     assert "Separar em duas câmeras" not in edit and "Metade de cima" not in edit
 
@@ -176,14 +186,15 @@ def test_a_one_lens_camera_is_not_offered_a_split(client, app):
 def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
     app.state.services.vision = SeenVision("1920x2160")  # two 1920x1080 lenses, one above the other
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.37:554/onvif1", role="door"))
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.37:554/onvif1", device="door"))
     assert "Separar em duas câmeras" in client.get("/cameras/1").text
     cameras = client.post("/cameras/1/split")
     assert "Jortan agora são duas câmeras, uma para cada lente." in cameras.text
+    assert cameras.text.count("Parar gravação") == 2  # both lenses record
     with app.state.services.db.session() as session:
         top, bottom = session.scalars(select(Camera).order_by(Camera.id)).all()
-        assert (top.name, top.part, top.role) == ("Jortan (cima)", "top", "door")
-        assert (bottom.name, bottom.part, bottom.role) == ("Jortan (baixo)", "bottom", "view")  # the door opens once
+        assert (top.name, top.part, top.device) == ("Jortan (cima)", "top", "door")
+        assert (bottom.name, bottom.part, bottom.device) == ("Jortan (baixo)", "bottom", "")  # the door opens once
         assert bottom.url == top.url  # the same address: the camera is still read once
     edit = client.get("/cameras/1").text
     assert "Separar em duas câmeras" not in edit and "Metade de cima" in edit
@@ -191,7 +202,7 @@ def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
 
 def test_open_pages_can_follow_every_camera(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Porta", url="0", role="door"))
+        session.add(Camera(name="Porta", url="0", device="door"))
     states = client.get("/cameras-states").json()
     assert states == {"1": {"state": "service-down", "label": "Serviço de reconhecimento parado"}}
 
@@ -227,6 +238,15 @@ def test_each_entry_shows_the_arrival_and_the_last_return(client, app):
     assert ">07:58</time>" in today and ">13:05</time>" in today and "2 vezes" in today
 
 
+def test_a_camera_without_a_door_records_but_its_sightings_are_not_entries(client, app):
+    with app.state.services.db.session() as session:
+        seen = _event("recognized", "Ana Souza")
+        seen.door = ""  # no door attached to the camera that saw her
+        session.add(seen)
+    assert "Ana Souza" not in client.get("/").text  # Today lists entries at a door
+    assert "Ana Souza" in client.get("/records").text
+
+
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):
     assert client.get("/cameras/1/state").json() == {"tone": "idle", "label": ""}
 
@@ -234,7 +254,7 @@ def test_live_frame_state_is_quiet_without_the_recognition_service(client):
 def test_door_screen_needs_its_secret_address(client, app):
     db = app.state.services.db
     with db.session() as session:
-        session.add(Camera(name="Porta", url="0", role="door"))
+        session.add(Camera(name="Porta", url="0", device="door"))
         session.flush()
         key = get_setting(session, "door_screen_key")
     assert client.get("/door?camera=1&key=wrong").status_code == 404

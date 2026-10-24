@@ -39,13 +39,22 @@
       {% if camera %}<span class="hint">{{ t("The password is hidden. Leave the address as it is to keep it.") }}</span>{% endif %}
     </div>
     <fieldset class="field">
-      <legend>{{ t("Used for") }}</legend>
+      <legend>{{ t("AI model") }}</legend>
       <div class="choices">
-        {% for key, label in roles.items() %}
-        <label class="choice"><input type="radio" name="role" value="{{ key }}" {% if form.role == key %}checked{% endif %}>{{ t(label) }}</label>
+        {% for key, label in analyses.items() %}
+        <label class="choice"><input type="radio" name="analysis" value="{{ key }}" {% if form.analysis == key %}checked{% endif %}>{{ t(label) }}</label>
         {% endfor %}
       </div>
-      {% if not camera %}<span class="hint">{{ t("A door camera starts recording as soon as you save it. You can stop it at any time.") }}</span>{% endif %}
+      <span class="hint">{{ t("Recognizes the registered people and keeps a photo of everyone it sees in Records.") }}{% if not camera %} {{ t("It starts recording as soon as you save. You can stop it at any time.") }}{% endif %}</span>
+    </fieldset>
+    <fieldset class="field">
+      <legend>{{ t("Attached device") }}</legend>
+      <div class="choices">
+        {% for key, label in devices.items() %}
+        <label class="choice"><input type="radio" name="device" value="{{ key }}" {% if form.device == key %}checked{% endif %}>{{ t(label) }}</label>
+        {% endfor %}
+      </div>
+      <span class="hint">{{ t("With a door, it opens when someone with access is recognized, and the entry shows on Today.") }}</span>
     </fieldset>
     {% if camera and camera.part %}
     <fieldset class="field">

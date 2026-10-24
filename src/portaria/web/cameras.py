@@ -19,7 +19,8 @@ from portaria.web.common import (
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
-ROLES = {"door": "Door: recognizes people", "view": "View only"}
+ANALYSES = {"faces": "Face recognition"}  # see Camera.analysis
+DEVICES = {"": "None", "door": "Door"}  # see Camera.device
 PARTS = {"top": "Top half", "bottom": "Bottom half", "": "Whole picture"}  # see Camera.part
 MJPEG = "multipart/x-mixed-replace; boundary=frame"
 
@@ -28,31 +29,34 @@ MJPEG = "multipart/x-mixed-replace; boundary=frame"
 def camera_list(request: Request) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:
-        cameras = session.scalars(select(Camera).order_by(Camera.role, Camera.name)).all()
+        cameras = session.scalars(select(Camera).order_by(Camera.device.desc(), Camera.name)).all()  # doors first
     status = s.vision.status()
     statuses = status.get("cameras", {}) if status else {}
     states = {c.id: recording_state(c, statuses.get(str(c.id)), status is not None) for c in cameras}
     return page(request, "cameras.html", section="cameras", cameras=cameras, statuses=statuses, states=states,
-                service_up=status is not None, roles=ROLES)
+                service_up=status is not None, analyses=ANALYSES)
 
 
 @router.get("/cameras/new", response_class=HTMLResponse)
 def camera_new(request: Request) -> HTMLResponse:
-    return page(request, "camera_form.html", section="cameras", camera=None, form={"role": "door"}, roles=ROLES,
-                error="")
+    form = {"analysis": "faces", "device": ""}
+    return page(request, "camera_form.html", section="cameras", camera=None, form=form, analyses=ANALYSES,
+                devices=DEVICES, error="")
 
 
 @router.post("/cameras/new", response_model=None)
 def camera_create(
-    request: Request, name: str = Form(""), url: str = Form(""), role: str = Form("door")
+    request: Request, name: str = Form(""), url: str = Form(""), analysis: str = Form("faces"),
+    device: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
-    error = _camera_error(name, url, role)
+    error = _camera_error(name, url, analysis, device)
     if error:
-        form = {"name": name, "url": url, "role": role}
-        return page(request, "camera_form.html", section="cameras", camera=None, form=form, roles=ROLES,
-                    error=error, status_code=400)
+        form = {"name": name, "url": url, "analysis": analysis, "device": device}
+        return page(request, "camera_form.html", section="cameras", camera=None, form=form, analyses=ANALYSES,
+                    devices=DEVICES, error=error, status_code=400)
     with services(request).db.session() as session:
-        camera = Camera(name=name.strip(), url=url.strip(), role=role, enabled=True)  # starts right away
+        camera = Camera(name=name.strip(), url=url.strip(), analysis=analysis, device=device,
+                        enabled=True)  # starts recording right away
         session.add(camera)
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera added", name.strip())
@@ -65,29 +69,32 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:
         camera = _get(session, camera_id)
-    form = {"name": camera.name, "url": redact(camera.url), "role": camera.role, "part": camera.part}
+    form = {"name": camera.name, "url": redact(camera.url), "analysis": camera.analysis, "device": camera.device,
+            "part": camera.part}
     status = s.vision.status()
     camera_status = status.get("cameras", {}).get(str(camera_id)) if status else None
     state = recording_state(camera, camera_status, status is not None)
-    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES, parts=PARTS,
-                state=state, two_lenses=not camera.part and _taller_than_wide(camera_status), error="")
+    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, analyses=ANALYSES,
+                devices=DEVICES, parts=PARTS, state=state,
+                two_lenses=not camera.part and _taller_than_wide(camera_status), error="")
 
 
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
-    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), role: str = Form("door"),
-    part: str | None = Form(None),
+    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), analysis: str = Form("faces"),
+    device: str = Form(""), part: str | None = Form(None),
 ) -> HTMLResponse | RedirectResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
         url = _keep_password(camera, url)
         part = camera.part if part not in PARTS else part  # the choice is only shown for a camera already split
-        error = _camera_error(name, url, role)
+        error = _camera_error(name, url, analysis, device)
         if error:
-            form = {"name": name, "url": redact(url), "role": role, "part": part}
-            return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES,
-                        parts=PARTS, state=None, error=error, status_code=400)
-        camera.name, camera.url, camera.role, camera.part = name.strip(), url.strip(), role, part
+            form = {"name": name, "url": redact(url), "analysis": analysis, "device": device, "part": part}
+            return page(request, "camera_form.html", section="cameras", camera=camera, form=form, analyses=ANALYSES,
+                        devices=DEVICES, parts=PARTS, state=None, error=error, status_code=400)
+        camera.name, camera.url, camera.part = name.strip(), url.strip(), part
+        camera.analysis, camera.device = analysis, device
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera changed", camera.name)
     flash(request, "Changes saved.")
@@ -98,9 +105,9 @@ def camera_update(
 def camera_split(request: Request, camera_id: int) -> RedirectResponse:
     """One camera for each lens of a two-lens camera, which sends both in one picture, one above the other.
 
-    Both keep the same address: the recognition service still opens the camera once. Only the first keeps
-    the camera's use; the second starts as view only, so a door opens once and a person seen by both
-    lenses is one entry, not two.
+    Both keep the same address: the recognition service still opens the camera once. Both record with
+    the camera's analysis; only the first keeps its device, so a door opens once and a person seen by
+    both lenses is one entry, not two.
     """
     t = translator(request)
     with services(request).db.session() as session:
@@ -109,8 +116,8 @@ def camera_split(request: Request, camera_id: int) -> RedirectResponse:
             return RedirectResponse(f"/cameras/{camera_id}", status_code=303)
         name = camera.name[:70]
         camera.name, camera.part = t("{name} (top)", name=name), "top"
-        session.add(Camera(name=t("{name} (bottom)", name=name), url=camera.url, role="view", part="bottom",
-                           enabled=camera.enabled))
+        session.add(Camera(name=t("{name} (bottom)", name=name), url=camera.url, analysis=camera.analysis,
+                           device="", part="bottom", enabled=camera.enabled))
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera split", name)
     flash(request, "{name} is now two cameras, one for each lens.", name=name)
@@ -134,14 +141,14 @@ def _switch(request: Request, camera_id: int, on: bool, next: str) -> RedirectRe
         camera.enabled = on
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera started" if on else "camera stopped", camera.name)
-        name, door = camera.name, camera.role == "door"
-    if door and on:
+        name, door = camera.name, camera.device == "door"
+    if on:
         flash(request, "Recording started: {name}.", name=name)
     elif door:
         flash(request, "Recording stopped: {name}. Nobody is recognized at this door until you start it again.",
               "warn", name=name)
     else:
-        flash(request, "Camera turned on: {name}." if on else "Camera turned off: {name}.", name=name)
+        flash(request, "Recording stopped: {name}.", "warn", name=name)
     return RedirectResponse(safe_next(next), status_code=303)
 
 
@@ -250,13 +257,13 @@ def _get(session, camera_id: int) -> Camera:
     return camera
 
 
-def _camera_error(name: str, url: str, role: str) -> str:
+def _camera_error(name: str, url: str, analysis: str, device: str) -> str:
     if not name.strip():
         return "Give the camera a name, such as Staff entrance."
     if not url.strip():
         return "Write the camera address."
-    if role not in ROLES:
-        return "Choose what the camera is used for."
+    if analysis not in ANALYSES or device not in DEVICES:
+        return "Choose the AI model and the device attached to the camera."
     return ""
 
 

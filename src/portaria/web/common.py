@@ -20,7 +20,7 @@ from portaria.people import People
 from portaria.users import user_exists
 from portaria.web.vision_client import VisionClient
 
-ASSET_VERSION = "14"  # bump to make browsers reload the stylesheet and scripts
+ASSET_VERSION = "15"  # bump to make browsers reload the stylesheet and scripts
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -38,10 +38,10 @@ CATEGORIES = {"employee": "Employee", "contractor": "Contractor", "visitor": "Vi
 KINDS = {"recognized": "Recognized", "unknown": "Not recognized", "spoof": "Photo or screen suspected"}
 DOOR_RESULTS = {"opened": "door opened", "shadow": "test mode, door stayed closed", "kept": "door stayed closed"}
 
-# What a camera is doing, as its chip says it. Door cameras record a photo of each entry, never video.
+# What a camera is doing, as its chip says it. Every camera records a photo of each person it decides on,
+# never video.
 RECORDING_STATES = {
     "recording": "Recording",
-    "live": "Live, not recording",
     "stopped": "Stopped",
     "no-image": "No image, not recording",
     "service-down": "Recognition service stopped",
@@ -56,7 +56,7 @@ def recording_state(camera: Camera, status: dict | None, service_up: bool) -> st
         return "service-down"
     if not status or not status.get("online"):
         return "no-image"
-    return "recording" if camera.role == "door" else "live"
+    return "recording"
 
 
 @dataclass

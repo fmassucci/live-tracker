@@ -79,7 +79,9 @@ def _snapshot_path(request: Request, event_id: int) -> Path:
 def live(request: Request, camera_id: int | None = None) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:  # stopped cameras too, so they can be started from here
-        cameras = session.scalars(select(Camera).order_by(Camera.enabled.desc(), Camera.role, Camera.name)).all()
+        cameras = session.scalars(
+            select(Camera).order_by(Camera.enabled.desc(), Camera.device.desc(), Camera.name)  # doors first
+        ).all()
     chosen = next((c for c in cameras if c.id == camera_id), cameras[0] if cameras else None)
     status = s.vision.status()
     camera_status = status.get("cameras", {}).get(str(chosen.id)) if status and chosen else None
@@ -104,16 +106,16 @@ def _today(request: Request) -> dict:
                 func.count().label("visits"),
             )
             .outerjoin(Person, Person.id == Event.person_id)
-            .where(Event.at >= start, Event.kind == "recognized")
+            .where(Event.at >= start, Event.kind == "recognized", Event.door != "")  # entries: at a door camera
             .group_by(Event.person_id, "name", "job", "category")
             .order_by(func.min(Event.at))
         ).all()
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
-        unrecognized_today = select(Event).where(Event.at >= start, Event.kind != "recognized")
+        unrecognized_today = select(Event).where(Event.at >= start, Event.kind != "recognized", Event.door != "")
         not_recognized = session.scalars(unrecognized_today.order_by(Event.at.desc()).limit(UNRECOGNIZED_SHOWN)).all()
         not_recognized_count = session.scalar(select(func.count()).select_from(unrecognized_today.subquery()))
         door_cameras = session.scalars(  # a stopped one too: Today shows that it isn't recording
-            select(Camera).where(Camera.role == "door").order_by(Camera.enabled.desc(), Camera.id)
+            select(Camera).where(Camera.device == "door").order_by(Camera.enabled.desc(), Camera.id)
         ).all()
     status = s.vision.status()
     door_camera = door_cameras[0] if door_cameras else None

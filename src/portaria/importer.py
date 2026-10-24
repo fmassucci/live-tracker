@@ -48,7 +48,7 @@ def _import_camera(cfg: Config, db: Database, report: ImportReport) -> None:
         if session.scalar(select(func.count()).select_from(Camera)):
             return
         name = Translator(cfg.web.language)("Door")
-        session.add(Camera(name=name, url=cfg.camera.source, role="door"))
+        session.add(Camera(name=name, url=cfg.camera.source, device="door"))
         bump(session, CAMERAS_VERSION)
         report.camera = name
 

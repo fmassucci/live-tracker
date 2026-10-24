@@ -48,7 +48,9 @@ def people_list(request: Request, q: str = "", show: str = "active") -> HTMLResp
         photos = dict(session.execute(select(Photo.person_id, func.count()).group_by(Photo.person_id)).all())
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
         last_seen = dict(session.execute(
-            select(Event.person_id, func.max(Event.at)).where(Event.kind == "recognized").group_by(Event.person_id)
+            select(Event.person_id, func.max(Event.at))
+            .where(Event.kind == "recognized", Event.door != "")  # the last entry, at a door camera
+            .group_by(Event.person_id)
         ).all())
         total = session.scalar(select(func.count()).select_from(Person))
     return page(
@@ -124,7 +126,7 @@ def person_detail(request: Request, person_id: int) -> HTMLResponse:
         events = session.scalars(
             select(Event).where(Event.person_id == person_id).order_by(Event.at.desc()).limit(12)
         ).all()
-        cameras = session.scalars(select(Camera).where(Camera.enabled).order_by(Camera.role, Camera.name)).all()
+        cameras = session.scalars(select(Camera).where(Camera.enabled).order_by(Camera.device.desc(), Camera.name)).all()
         camera_names = {c.id: c.name for c in session.scalars(select(Camera))}
     form = {"name": person.name, "category": person.category, "job_title": person.job_title, "notes": person.notes,
             "door_access": person.door_access, "active": person.active}

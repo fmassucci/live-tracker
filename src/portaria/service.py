@@ -43,8 +43,9 @@ class CameraSpec:
     id: int | None  # None for a camera given with --source, which isn't in the database
     name: str
     url: str
-    role: str  # "door": recognition runs here; "view": image only
+    device: str = ""  # "door": recognizing someone with access opens it; "": nothing attached
     part: str = ""  # "": the whole picture; "top" or "bottom": one lens of a two-lens camera
+    analysis: str = "faces"  # what runs on the picture: face recognition
 
     @property
     def channel(self) -> str:
@@ -52,7 +53,7 @@ class CameraSpec:
 
 
 class CameraWorker:
-    """One camera on its own thread: frames for the web UI always, recognition on door cameras.
+    """One camera on its own thread: frames for the web UI, and recognition. Every camera records.
 
     `source` may be shared: the two lenses of a two-lens camera arrive in one picture, read once.
     """
@@ -61,8 +62,8 @@ class CameraWorker:
         self.spec = spec
         self._service = service
         self._camera = source
-        self.recognizer = service.make_recognizer() if spec.role == "door" else None
-        self.status: dict = {"name": spec.name, "role": spec.role, "online": False, "state": "offline"}
+        self.recognizer = service.make_recognizer() if spec.analysis == "faces" else None
+        self.status: dict = {"name": spec.name, "device": spec.device, "online": False, "state": "offline"}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name=spec.channel, daemon=True)
 
@@ -103,7 +104,7 @@ class CameraWorker:
             self._publish(frame, result)
             self.status = {
                 "name": self.spec.name,
-                "role": self.spec.role,
+                "device": self.spec.device,
                 "online": True,
                 "fps": round(rate.tick(), 1),
                 "size": f"{frame.image.shape[1]}x{frame.image.shape[0]}",
@@ -118,7 +119,7 @@ class CameraWorker:
         channel = self.spec.channel
         preview.publish(f"{channel}-raw", frame.image)
         preview.publish(channel, render(frame.image, result.overlays, []))
-        if self.recognizer:  # the door screen shows only the main face's box, never names or scores
+        if self.spec.device == "door":  # the door screen shows only the main face's box, never names or scores
             boxes = [Overlay(o.face, "", o.tone) for o in result.overlays if o.face is result.face]
             preview.publish(f"{channel}-kiosk", render(frame.image, boxes, []))
 
@@ -181,14 +182,16 @@ class VisionService:
         self._stop.set()
 
     def on_decision(self, spec: CameraSpec, frame: Frame, result: Result) -> None:
-        """Called from a camera's thread: opens the door when it should and records the event."""
+        """Called from a camera's thread: records the event, and at a door camera opens it when it should."""
         decision = result.decision
         assert decision is not None
         name = self.gallery.name(decision.person) if decision.person else None
-        door = "kept"
-        if decision.kind == "recognized" and decision.person in self._door_allowed:
-            self._door.open(name or "")
-            door = "shadow" if self.cfg.door.mode == "shadow" else "opened"
+        door = ""  # no door attached to this camera
+        if spec.device == "door":
+            door = "kept"
+            if decision.kind == "recognized" and decision.person in self._door_allowed:
+                self._door.open(name or "")
+                door = "shadow" if self.cfg.door.mode == "shadow" else "opened"
         self._events.record(
             decision,
             render(frame.image, result.overlays, [], width=1280),
@@ -200,7 +203,8 @@ class VisionService:
             liveness=self._liveness.name,
         )
         who = f" {name}" if name else ""
-        log.info("%s%s (score %.2f) at %s, door %s", decision.kind, who, decision.score, spec.name, door)
+        at_door = f", door {door}" if door else ""
+        log.info("%s%s (score %.2f) at %s%s", decision.kind, who, decision.score, spec.name, at_door)
 
     def _sync(self) -> None:
         """Reloads faces and cameras when the web UI has changed them."""
@@ -215,10 +219,11 @@ class VisionService:
                 log.info("faces loaded: %d people", len(self.gallery.people))
             if versions[CAMERAS_VERSION] != self._versions.get(CAMERAS_VERSION):
                 if self.source:
-                    specs = [CameraSpec(None, "source", self.source, "door")]
+                    specs = [CameraSpec(None, "source", self.source, device="door")]
                 else:
                     rows = session.scalars(select(CameraRow).where(CameraRow.enabled).order_by(CameraRow.id))
-                    specs = [CameraSpec(c.id, c.name, c.url, c.role, part=c.part) for c in rows]
+                    specs = [CameraSpec(c.id, c.name, c.url, device=c.device, part=c.part, analysis=c.analysis)
+                             for c in rows]
                 self._apply(specs)
         self._versions = versions
 
@@ -238,7 +243,7 @@ class VisionService:
                     self._sources[spec.url] = Camera(spec.url, reconnect_s, loop=self.source is None).start()
                 self._workers[key] = CameraWorker(spec, self, self._sources[spec.url])
                 self._workers[key].start()
-                log.info("camera %s started (%s)", spec.name, spec.role)
+                log.info("camera %s started%s", spec.name, " (door)" if spec.device == "door" else "")
         if not self._workers:
             log.warning("no cameras: add one in the web UI (Cameras)")
 

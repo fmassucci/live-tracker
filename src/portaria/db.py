@@ -44,7 +44,10 @@ class Camera(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
     url: Mapped[str] = mapped_column(String(500))  # RTSP URL (with password), video file, or webcam index
-    role: Mapped[str] = mapped_column(String(10), default="door")  # "door": recognition runs; "view": image only
+    # What runs on the camera's picture, and what the camera drives. Every camera records with its analysis.
+    analysis: Mapped[str] = mapped_column(String(20), default="faces", server_default="faces")  # face recognition
+    # "door": recognizing someone with access opens it, and counts as an entry on Today. "": nothing attached.
+    device: Mapped[str] = mapped_column(String(10), default="", server_default="")
     # "": the whole picture. "top" or "bottom": one lens of a two-lens camera that sends both in one picture.
     part: Mapped[str] = mapped_column(String(10), default="", server_default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -110,7 +113,7 @@ class Event(Base):
     person_name: Mapped[str | None] = mapped_column(String(120))  # kept even if the person is deleted
     score: Mapped[float] = mapped_column(Float)
     snapshot: Mapped[str | None] = mapped_column(String(300))  # relative to the data folder
-    door: Mapped[str] = mapped_column(String(10))  # "shadow" (logged only), "opened" or "kept"
+    door: Mapped[str] = mapped_column(String(10))  # "shadow" (logged only), "opened", "kept"; "" away from the door
     model: Mapped[str] = mapped_column(String(20))
     liveness: Mapped[str] = mapped_column(String(20))
 

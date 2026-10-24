@@ -305,7 +305,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 .camera-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #9ca3af; }
 .camera-state-recording .camera-dot { background: #ef4444; animation: recording 1.6s ease-in-out infinite; }
-.camera-state-live .camera-dot { background: #22c55e; }
 .camera-state-no-image .camera-dot, .camera-state-service-down .camera-dot { background: #f59e0b; }
 .camera-state-recording:not(.glass) { background: var(--bad-wash); color: var(--bad); box-shadow: none; }
 .camera-state-no-image:not(.glass), .camera-state-service-down:not(.glass) { background: var(--caution-wash); color: var(--caution); box-shadow: none; }
