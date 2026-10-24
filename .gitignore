@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project: biometric data, model files and local settings never go into git
+/data/
+/models/
+/config.toml
