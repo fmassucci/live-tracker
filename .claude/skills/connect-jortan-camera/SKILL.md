@@ -66,6 +66,11 @@ only one with the door opens it and counts entries on Today. Click **Testar cone
 
 ## After it works
 
+- To use each lens as a camera of its own, open the camera's **Editar** page and click **Separar em duas
+  câmeras**. Both lenses record; the top one keeps the camera's device, the bottom one starts with
+  **Nenhum**, so a person seen by both lenses is one entry. The camera is still read once. Each lens then
+  has its own name, settings and live image. The button shows only for a
+  picture taller than wide, i.e. lenses one above the other; side-by-side lenses can't be split yet.
 - The picture is upside down when the camera stands on a table: it's made to hang. Mount it, or flip the
   image in the Yoosee app.
 - Reserve its address in the router so it doesn't change.
