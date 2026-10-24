@@ -61,8 +61,10 @@ address. The door screen's address (with its secret key) is in Settings.
 ### First steps in the UI
 
 1. **Cameras:** add the door camera with its video address. *Test connection* checks it before saving, and
-   *Find cameras on this network* lists ONVIF cameras and their addresses. On Jortan cameras the address is
-   often `rtsp://user:pass@IP:554/onvif1`, and `onvif2` for the second lens.
+   *Find cameras on this network* lists ONVIF cameras and their addresses. Jortan cameras use the Yoosee
+   app: turn on *NVR connection* in the camera's settings there and create a password. The address is then
+   `rtsp://admin:PASSWORD@IP:554/onvif1` (write a `#` in the password as `%23`), and the network search may
+   not list it. A dual-lens Jortan sends both lenses in one picture, one above the other.
 2. **People:** add each person with 3 to 5 face photos. Each photo is checked as soon as it is chosen. Photos
    taken by the door camera itself (*Take photos with a camera*) match best. Photos require confirming that the
    person was told how their face is used (LGPD).
