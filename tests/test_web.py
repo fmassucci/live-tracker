@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from conftest import FakeTools
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from portaria.db import Camera, Event, get_setting
 from portaria.web.app import create_app
@@ -152,6 +153,40 @@ def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
     cameras = client.post("/cameras/1/start")
     assert "Gravação iniciada: Porta." in cameras.text and "Parar gravação" in cameras.text
     assert client.post("/cameras/99/start").status_code == 404
+
+
+class SeenVision(NoVision):
+    """The recognition service receives camera 1's picture at this size."""
+
+    def __init__(self, size: str) -> None:
+        self.size = size
+
+    def status(self):
+        return {"cameras": {"1": {"online": True, "size": self.size, "fps": 17.2, "state": "idle"}}}
+
+
+def test_a_one_lens_camera_is_not_offered_a_split(client, app):
+    app.state.services.vision = SeenVision("1920x1080")
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.38:554/onvif1", role="door"))
+    edit = client.get("/cameras/1").text
+    assert "Separar em duas câmeras" not in edit and "Metade de cima" not in edit
+
+
+def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
+    app.state.services.vision = SeenVision("1920x2160")  # two 1920x1080 lenses, one above the other
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.37:554/onvif1", role="door"))
+    assert "Separar em duas câmeras" in client.get("/cameras/1").text
+    cameras = client.post("/cameras/1/split")
+    assert "Jortan agora são duas câmeras, uma para cada lente." in cameras.text
+    with app.state.services.db.session() as session:
+        top, bottom = session.scalars(select(Camera).order_by(Camera.id)).all()
+        assert (top.name, top.part, top.role) == ("Jortan (cima)", "top", "door")
+        assert (bottom.name, bottom.part, bottom.role) == ("Jortan (baixo)", "bottom", "view")  # the door opens once
+        assert bottom.url == top.url  # the same address: the camera is still read once
+    edit = client.get("/cameras/1").text
+    assert "Separar em duas câmeras" not in edit and "Metade de cima" in edit
 
 
 def test_open_pages_can_follow_every_camera(client, app):

@@ -45,6 +45,8 @@ class Camera(Base):
     name: Mapped[str] = mapped_column(String(80))
     url: Mapped[str] = mapped_column(String(500))  # RTSP URL (with password), video file, or webcam index
     role: Mapped[str] = mapped_column(String(10), default="door")  # "door": recognition runs; "view": image only
+    # "": the whole picture. "top" or "bottom": one lens of a two-lens camera that sends both in one picture.
+    part: Mapped[str] = mapped_column(String(10), default="", server_default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

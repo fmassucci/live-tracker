@@ -2,7 +2,9 @@ import re
 import socket
 import threading
 
-from portaria.camera import probe
+import numpy as np
+
+from portaria.camera import Frame, part_of, probe
 
 SDP = ("v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=Camera\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n"
        "m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=control:trackID=0\r\n")
@@ -56,3 +58,15 @@ def test_a_camera_that_wont_stream_over_tcp_is_asked_for_udp():
     assert not info["opened"]  # the fake camera has no video
     # One transport per attempt shows the option reaches FFmpeg, which on Windows reads it through msvcrt.dll
     assert asked == ["TCP", "UDP"]
+
+
+def test_each_lens_of_a_two_lens_picture_is_one_half():
+    image = np.zeros((2160, 1920, 3), np.uint8)  # what the Jortan sends: two 1920x1080 lenses, one above the other
+    image[1080:] = 200
+    frame = Frame(image, seq=7, captured_at=1.0, signature=b"whole picture")
+    top, bottom = part_of(frame, "top"), part_of(frame, "bottom")
+    assert top.image.shape == bottom.image.shape == (1080, 1920, 3)
+    assert top.image.max() == 0 and bottom.image.min() == 200
+    assert top.seq == bottom.seq == 7
+    assert top.signature != bottom.signature  # a lens that freezes is noticed on its own
+    assert part_of(frame, "") is frame

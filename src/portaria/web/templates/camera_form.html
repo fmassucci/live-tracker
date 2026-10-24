@@ -16,6 +16,16 @@
 </div>
 {% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
 
+{% if two_lenses %}
+<section class="subpanel" aria-labelledby="lenses-title" style="margin-bottom: 18px">
+  <h3 id="lenses-title">{{ t("Two lenses in one picture") }}</h3>
+  <p class="muted" style="margin: 0 0 14px">{{ t("This camera sends two pictures, one above the other. Split it and each lens becomes a camera of its own, with its own name, use and live image.") }}</p>
+  <form method="post" action="/cameras/{{ camera.id }}/split">
+    <button class="button">{{ t("Split into two cameras") }}</button>
+  </form>
+</section>
+{% endif %}
+
 <div class="form-grid">
   <form method="post" action="{{ '/cameras/' ~ camera.id if camera else '/cameras/new' }}" class="panel">
     <input type="hidden" name="camera_id" value="{{ camera.id if camera else '' }}">
@@ -37,6 +47,17 @@
       </div>
       {% if not camera %}<span class="hint">{{ t("A door camera starts recording as soon as you save it. You can stop it at any time.") }}</span>{% endif %}
     </fieldset>
+    {% if camera and camera.part %}
+    <fieldset class="field">
+      <legend>{{ t("Picture") }}</legend>
+      <div class="choices">
+        {% for key, label in parts.items() %}
+        <label class="choice"><input type="radio" name="part" value="{{ key }}" {% if form.part == key %}checked{% endif %}>{{ t(label) }}</label>
+        {% endfor %}
+      </div>
+      <span class="hint">{{ t("Two-lens cameras send both lenses in one picture, one above the other.") }}</span>
+    </fieldset>
+    {% endif %}
     <div class="actions">
       <button class="button">{{ t("Save camera") }}</button>
       <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>

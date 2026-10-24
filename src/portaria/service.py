@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
-from portaria.camera import Camera, Frame
+from portaria.camera import Camera, Frame, part_of
 from portaria.config import Config
 from portaria.db import CAMERAS_VERSION, FACES_VERSION, Database, get_setting
 from portaria.db import Camera as CameraRow
@@ -44,6 +44,7 @@ class CameraSpec:
     name: str
     url: str
     role: str  # "door": recognition runs here; "view": image only
+    part: str = ""  # "": the whole picture; "top" or "bottom": one lens of a two-lens camera
 
     @property
     def channel(self) -> str:
@@ -51,12 +52,15 @@ class CameraSpec:
 
 
 class CameraWorker:
-    """One camera on its own thread: frames for the web UI always, recognition on door cameras."""
+    """One camera on its own thread: frames for the web UI always, recognition on door cameras.
 
-    def __init__(self, spec: CameraSpec, service: VisionService) -> None:
+    `source` may be shared: the two lenses of a two-lens camera arrive in one picture, read once.
+    """
+
+    def __init__(self, spec: CameraSpec, service: VisionService, source: Camera) -> None:
         self.spec = spec
         self._service = service
-        self._camera = Camera(spec.url, service.cfg.camera.reconnect_delay_s, loop=service.source is None)
+        self._camera = source
         self.recognizer = service.make_recognizer() if spec.role == "door" else None
         self.status: dict = {"name": spec.name, "role": spec.role, "online": False, "state": "offline"}
         self._stop = threading.Event()
@@ -67,13 +71,11 @@ class CameraWorker:
         return self._camera.ended
 
     def start(self) -> None:
-        self._camera.start()
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
         self._thread.join(timeout=10)
-        self._camera.stop()
 
     def _run(self) -> None:
         cfg = self._service.cfg
@@ -90,6 +92,7 @@ class CameraWorker:
                 self.status = {**self.status, "online": False, "state": "offline", "fps": 0}
                 continue
             seq = frame.seq
+            frame = part_of(frame, self.spec.part)
             if repeats.skip(frame):
                 continue
             result = self.recognizer.process(frame, repeats.frozen(frame)) if self.recognizer else Result()
@@ -134,6 +137,7 @@ class VisionService:
         self._events = EventLog(self.db, cfg.paths.data_dir)
         self._door_allowed: set[str] = set()
         self._workers: dict[int | None, CameraWorker] = {}
+        self._sources: dict[str, Camera] = {}  # by address: the cameras cut from one picture share it
         self._versions: dict[str, str | None] = {}
         self._stop = threading.Event()
 
@@ -169,6 +173,8 @@ class VisionService:
         finally:
             for worker in self._workers.values():
                 worker.stop()
+            for source in self._sources.values():
+                source.stop()
             self.preview.stop()
 
     def stop(self) -> None:
@@ -212,7 +218,7 @@ class VisionService:
                     specs = [CameraSpec(None, "source", self.source, "door")]
                 else:
                     rows = session.scalars(select(CameraRow).where(CameraRow.enabled).order_by(CameraRow.id))
-                    specs = [CameraSpec(c.id, c.name, c.url, c.role) for c in rows]
+                    specs = [CameraSpec(c.id, c.name, c.url, c.role, part=c.part) for c in rows]
                 self._apply(specs)
         self._versions = versions
 
@@ -223,9 +229,14 @@ class VisionService:
                 worker.stop()
                 del self._workers[key]
                 log.info("camera %s stopped", worker.spec.name)
+        for url in self._sources.keys() - {spec.url for spec in specs}:  # no camera reads it any more
+            self._sources.pop(url).stop()
         for key, spec in wanted.items():
             if key not in self._workers:
-                self._workers[key] = CameraWorker(spec, self)
+                if spec.url not in self._sources:
+                    reconnect_s = self.cfg.camera.reconnect_delay_s
+                    self._sources[spec.url] = Camera(spec.url, reconnect_s, loop=self.source is None).start()
+                self._workers[key] = CameraWorker(spec, self, self._sources[spec.url])
                 self._workers[key].start()
                 log.info("camera %s started (%s)", spec.name, spec.role)
         if not self._workers:

@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from sqlalchemy import select
 
 from portaria import onvif
-from portaria.camera import probe, redact
+from portaria.camera import crop, probe, redact
 from portaria.db import CAMERAS_VERSION, Camera, audit, bump
 from portaria.web.common import (
     KINDS, RECORDING_STATES, flash, fragment, page, recording_state, require_user, safe_next, services, translator,
@@ -20,6 +20,7 @@ from portaria.web.common import (
 router = APIRouter(dependencies=[Depends(require_user)])
 
 ROLES = {"door": "Door: recognizes people", "view": "View only"}
+PARTS = {"top": "Top half", "bottom": "Bottom half", "": "Whole picture"}  # see Camera.part
 MJPEG = "multipart/x-mixed-replace; boundary=frame"
 
 
@@ -64,29 +65,55 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:
         camera = _get(session, camera_id)
-    form = {"name": camera.name, "url": redact(camera.url), "role": camera.role}
+    form = {"name": camera.name, "url": redact(camera.url), "role": camera.role, "part": camera.part}
     status = s.vision.status()
-    state = recording_state(camera, status.get("cameras", {}).get(str(camera_id)) if status else None, status is not None)
-    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES, state=state,
-                error="")
+    camera_status = status.get("cameras", {}).get(str(camera_id)) if status else None
+    state = recording_state(camera, camera_status, status is not None)
+    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES, parts=PARTS,
+                state=state, two_lenses=not camera.part and _taller_than_wide(camera_status), error="")
 
 
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
-    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), role: str = Form("door")
+    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), role: str = Form("door"),
+    part: str | None = Form(None),
 ) -> HTMLResponse | RedirectResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
         url = _keep_password(camera, url)
+        part = camera.part if part not in PARTS else part  # the choice is only shown for a camera already split
         error = _camera_error(name, url, role)
         if error:
-            form = {"name": name, "url": redact(url), "role": role}
+            form = {"name": name, "url": redact(url), "role": role, "part": part}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES,
-                        state=None, error=error, status_code=400)
-        camera.name, camera.url, camera.role = name.strip(), url.strip(), role
+                        parts=PARTS, state=None, error=error, status_code=400)
+        camera.name, camera.url, camera.role, camera.part = name.strip(), url.strip(), role, part
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera changed", camera.name)
     flash(request, "Changes saved.")
+    return RedirectResponse("/cameras", status_code=303)
+
+
+@router.post("/cameras/{camera_id}/split")
+def camera_split(request: Request, camera_id: int) -> RedirectResponse:
+    """One camera for each lens of a two-lens camera, which sends both in one picture, one above the other.
+
+    Both keep the same address: the recognition service still opens the camera once. Only the first keeps
+    the camera's use; the second starts as view only, so a door opens once and a person seen by both
+    lenses is one entry, not two.
+    """
+    t = translator(request)
+    with services(request).db.session() as session:
+        camera = _get(session, camera_id)
+        if camera.part:
+            return RedirectResponse(f"/cameras/{camera_id}", status_code=303)
+        name = camera.name[:70]
+        camera.name, camera.part = t("{name} (top)", name=name), "top"
+        session.add(Camera(name=t("{name} (bottom)", name=name), url=camera.url, role="view", part="bottom",
+                           enabled=camera.enabled))
+        bump(session, CAMERAS_VERSION)
+        audit(session, request.session["user"], "camera split", name)
+    flash(request, "{name} is now two cameras, one for each lens.", name=name)
     return RedirectResponse("/cameras", status_code=303)
 
 
@@ -131,7 +158,9 @@ def camera_delete(request: Request, camera_id: int) -> RedirectResponse:
 
 
 @router.post("/cameras-test", response_class=HTMLResponse)
-def camera_test(request: Request, url: str = Form(""), camera_id: str = Form("")) -> HTMLResponse:
+def camera_test(
+    request: Request, url: str = Form(""), camera_id: str = Form(""), part: str = Form("")
+) -> HTMLResponse:
     """Opens the address for a moment and shows what came back, before the camera is saved."""
     if camera_id.isdigit():
         with services(request).db.session() as session:
@@ -146,6 +175,8 @@ def camera_test(request: Request, url: str = Form(""), camera_id: str = Form("")
                         error="No image from this address. Check the address, user and password.")
     preview = None
     if image is not None:
+        image = crop(image, part)
+        info = {**info, "size": f"{image.shape[1]}x{image.shape[0]}"}
         scale = min(1.0, 480 / image.shape[1])
         ok, buffer = cv2.imencode(".jpg", cv2.resize(image, None, fx=scale, fy=scale), [cv2.IMWRITE_JPEG_QUALITY, 80])
         preview = base64.b64encode(buffer.tobytes()).decode() if ok else None
@@ -227,6 +258,12 @@ def _camera_error(name: str, url: str, role: str) -> str:
     if role not in ROLES:
         return "Choose what the camera is used for."
     return ""
+
+
+def _taller_than_wide(status: dict | None) -> bool:
+    """Two-lens cameras send both lenses in one picture, one above the other, which is taller than wide."""
+    width, _, height = (status or {}).get("size", "").partition("x")
+    return width.isdigit() and height.isdigit() and int(height) > int(width)
 
 
 def _keep_password(camera: Camera, url: str) -> str:

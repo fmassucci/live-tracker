@@ -61,6 +61,26 @@ def redact(source: str) -> str:
     return re.sub(r"//[^/@]*@", "//***@", source)
 
 
+def crop(image: np.ndarray, part: str) -> np.ndarray:
+    """The whole picture, or its "top" or "bottom" half.
+
+    Two-lens cameras send both lenses in one picture, one above the other; each half is one lens.
+    """
+    half = image.shape[0] // 2
+    if part == "top":
+        return image[:half]
+    if part == "bottom":
+        return image[half:]
+    return image
+
+
+def part_of(frame: Frame, part: str) -> Frame:
+    if not part:
+        return frame
+    image = crop(frame.image, part)
+    return Frame(image, frame.seq, frame.captured_at, _signature(image))
+
+
 def _signature(image: np.ndarray) -> bytes:
     return hashlib.blake2b(image[::8, ::8].tobytes(), digest_size=16).digest()
 
