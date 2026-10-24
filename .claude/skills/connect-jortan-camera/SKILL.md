@@ -46,8 +46,9 @@ rtsp://admin:PASSWORD@CAMERA-IP:554/onvif1
 
 ## 4. Add it in the app
 
-**Câmeras**, **Adicionar câmera**: name, **Endereço de vídeo**, and **Uso** (**Porta: reconhece pessoas** to
-recognize people, **Só imagem** to watch only). Click **Testar conexão**, then **Salvar câmera**.
+**Câmeras**, **Adicionar câmera**: name, **Endereço de vídeo**, **Modelo de IA** (**Reconhecimento facial**)
+and **Dispositivo ligado**: **Porta** for the camera at the door, **Nenhum** otherwise. Every camera records;
+only one with the door opens it and counts entries on Today. Click **Testar conexão**, then **Salvar câmera**.
 
 ## 5. Check it streams
 
