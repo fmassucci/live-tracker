@@ -80,6 +80,15 @@ def test_unmatched_faces_become_one_unknown_event_once_the_face_has_settled():
     assert decisions[0].person is None
 
 
+def test_after_a_recognition_the_rest_of_the_visit_is_not_recorded_as_unknown():
+    maker = _maker()
+    assert [d.kind for d in _feed(maker, 0, 5)] == ["recognized"]
+    assert _feed(maker, 5, 40, score=0.2) == []  # standing up, turning away, walking off
+    for t in range(40, 52):  # nobody at the door: the visit is over
+        maker.no_face(t / 10)
+    assert [d.kind for d in _feed(maker, 52, 80, score=0.2)] == ["unknown"]  # a new visit, a stranger
+
+
 def test_a_known_face_turning_toward_the_camera_is_not_first_recorded_as_unknown():
     maker = _maker()
     assert _feed(maker, 0, 5, score=0.15) == []  # the first frames match poorly

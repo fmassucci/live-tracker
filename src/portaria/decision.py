@@ -79,6 +79,11 @@ class DecisionMaker:
                 return self._decide("spoof", obs.person, spoofed, obs.at, self._cfg.unknown_cooldown_s)
             return None
 
+        if self._decided is not None and self._decided[0] == "recognized":
+            # Someone was recognized in this visit; the frames as they stand up, turn or walk off
+            # match poorly but aren't a new attempt. A stranger right behind them, with no gap, isn't
+            # flagged either, but can't open the door: only a recognition does.
+            return None
         # A known face still turning toward the camera matches poorly for its first frames, so "not
         # recognized" waits until the face has had time to settle; a match comes much sooner.
         settled = obs.at - self._visit_started_at >= self._cfg.unknown_after_s
