@@ -77,6 +77,16 @@
     img.addEventListener("error", () => setTimeout(() => reconnect(img), 3000));
   }
 
+  // Today refreshes its parts every few seconds; the strip of faces keeps its scroll position.
+  let stripScroll = 0;
+  document.addEventListener("htmx:oobBeforeSwap", () => {
+    stripScroll = document.querySelector("#not-recognized .face-row")?.scrollLeft ?? 0;
+  });
+  document.addEventListener("htmx:oobAfterSwap", () => {
+    const row = document.querySelector("#not-recognized .face-row");
+    if (row) row.scrollLeft = stripScroll;
+  });
+
   // Camera thumbnails: a fresh picture every few seconds.
   if (document.querySelector("img[data-refresh]")) {
     setInterval(() => {
