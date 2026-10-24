@@ -21,6 +21,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if not args.verbose:
         os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")  # read when cv2 is first imported
+    # Windows webcams (Media Foundation) take several seconds to open with hardware transforms on,
+    # about one second without them. Also read when cv2 is first imported.
+    os.environ.setdefault("OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS", "0")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     cfg = load_config(args.config)
