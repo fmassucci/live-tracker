@@ -60,7 +60,9 @@ address. The door screen's address (with its secret key) is in Settings.
 
 ### First steps in the UI
 
-1. **Cameras:** add the door camera with its video address. *Test connection* checks it before saving, and
+1. **Cameras:** add each camera with its video address. Every camera recognizes people and records; set
+   *Attached device* to *Door* on the camera at the door, which opens it and counts the entries on Today.
+   *Test connection* checks the address before saving, and
    *Find cameras on this network* lists ONVIF cameras and their addresses. Jortan cameras use the Yoosee
    app: turn on *NVR connection* in the camera's settings there and create a password. The address is then
    `rtsp://admin:PASSWORD@IP:554/onvif1` (write a `#` in the password as `%23`), and the network search may
