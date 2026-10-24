@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 import cv2
@@ -6,7 +7,7 @@ import pytest
 from conftest import FakeTools
 from fastapi.testclient import TestClient
 
-from portaria.db import Camera, get_setting
+from portaria.db import Camera, Event, get_setting
 from portaria.web.app import create_app
 from portaria.web.common import recording_state
 
@@ -158,6 +159,20 @@ def test_open_pages_can_follow_every_camera(client, app):
         session.add(Camera(name="Porta", url="0", role="door"))
     states = client.get("/cameras-states").json()
     assert states == {"1": {"state": "service-down", "label": "Serviço de reconhecimento parado"}}
+
+
+def test_today_lists_who_came_in_and_shows_faces_not_recognized_only_when_there_are_some(client, app):
+    assert "Não reconhecidos hoje" not in client.get("/").text
+
+    def event(kind: str, name: str | None) -> Event:
+        return Event(at=datetime.now(), kind=kind, person_name=name, score=0.7, door="shadow", model="auraface",
+                     liveness="none")
+
+    with app.state.services.db.session() as session:
+        session.add_all([event("recognized", "Ana Souza"), event("unknown", None)])
+    today = client.get("/").text
+    assert "Ana Souza" in today and "Não reconhecidos hoje" in today
+    assert "Ainda não chegaram" not in today
 
 
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):

@@ -18,6 +18,7 @@ from portaria.web.common import (
 router = APIRouter(dependencies=[Depends(require_user)])
 
 REFRESH_S = 5  # Today refreshes this often; an entry this recent gets the stamping animation
+UNRECOGNIZED_SHOWN = 30  # faces not recognized shown on Today, newest first; Records has all of them
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -107,9 +108,9 @@ def _today(request: Request) -> dict:
             .order_by(func.min(Event.at))
         ).all()
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
-        alerts = session.scalars(
-            select(Event).where(Event.at >= start, Event.kind != "recognized").order_by(Event.at.desc()).limit(12)
-        ).all()
+        unrecognized_today = select(Event).where(Event.at >= start, Event.kind != "recognized")
+        not_recognized = session.scalars(unrecognized_today.order_by(Event.at.desc()).limit(UNRECOGNIZED_SHOWN)).all()
+        not_recognized_count = session.scalar(select(func.count()).select_from(unrecognized_today.subquery()))
         door_cameras = session.scalars(  # a stopped one too: Today shows that it isn't recording
             select(Camera).where(Camera.role == "door").order_by(Camera.enabled.desc(), Camera.id)
         ).all()
@@ -120,8 +121,8 @@ def _today(request: Request) -> dict:
         "now": now,
         "entries": entries,
         "avatars": avatars,
-        "alerts": alerts,
-        "kinds": KINDS,
+        "not_recognized": not_recognized,
+        "not_recognized_count": not_recognized_count,
         "door_cameras": door_cameras,
         "door_camera": door_camera,
         "camera_status": camera_status,

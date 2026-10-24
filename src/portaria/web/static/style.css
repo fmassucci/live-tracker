@@ -326,10 +326,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 .clock { font-size: 40px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
 .today { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); gap: 24px; align-items: start; }
 .strip { margin-top: 26px; }
-.face-row { display: flex; gap: 12px; overflow-x: auto; list-style: none; margin: 0; padding: 2px 2px 8px; }
+.strip h2 { display: flex; align-items: center; gap: 10px; }
+.count-bad { background: var(--bad-wash); color: var(--bad); }
+.face-row { display: flex; gap: 12px; overflow-x: auto; list-style: none; margin: 0; padding: 3px 3px 8px; }
 .face-row li { flex: none; }
-.face-row a { display: grid; gap: 6px; color: var(--ink-2); text-decoration: none; font-size: 12.5px; font-weight: 550; text-align: center; }
-.face-row img { width: 76px; height: 76px; border-radius: 16px; object-fit: cover; box-shadow: 0 0 0 2px var(--bad); }
+.face-row a { display: grid; justify-items: center; gap: 6px; width: 80px; color: var(--ink-2); text-decoration: none; font-size: 12.5px; font-weight: 550; text-align: center; }
+.face-row img, .face-missing {
+  display: block; width: 76px; height: 76px; border-radius: 16px; object-fit: cover;
+  background: var(--surface-2); box-shadow: 0 0 0 2px var(--bad);
+}
+.face-note { color: var(--bad); font-weight: 600; }
 .entries { padding: 18px 20px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .entry-list { list-style: none; margin: 0; padding: 0; }

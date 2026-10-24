@@ -20,7 +20,7 @@ from portaria.people import People
 from portaria.users import user_exists
 from portaria.web.vision_client import VisionClient
 
-ASSET_VERSION = "9"  # bump to make browsers reload the stylesheet and scripts
+ASSET_VERSION = "10"  # bump to make browsers reload the stylesheet and scripts
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
