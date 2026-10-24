@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import cv2
 import numpy as np
 import pytest
@@ -6,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from portaria.db import Camera, get_setting
 from portaria.web.app import create_app
+from portaria.web.common import recording_state
 
 
 @pytest.fixture
@@ -108,6 +111,29 @@ def test_logo_upload_is_stored_as_png_and_shown(client, cfg):
     assert logo.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert cv2.imread(str(logo)).shape[1] <= 512
     assert '/branding/logo.png?v=' in client.get("/").text
+
+
+def test_recording_state_says_why_a_camera_is_not_recording():
+    door = SimpleNamespace(enabled=True, role="door")
+    assert recording_state(door, {"online": True}, service_up=True) == "recording"
+    assert recording_state(door, {"online": False}, service_up=True) == "no-image"
+    assert recording_state(door, None, service_up=False) == "service-down"
+    assert recording_state(SimpleNamespace(enabled=False, role="door"), {"online": True}, service_up=True) == "stopped"
+    assert recording_state(SimpleNamespace(enabled=True, role="view"), {"online": True}, service_up=True) == "live"
+
+
+def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Porta", url="0", role="door"))
+    assert "Parar gravação" in client.get("/cameras").text
+    today = client.post("/cameras/1/stop", data={"next": "/"})  # follows the redirect back to Today
+    assert "Gravação parada: Porta." in today.text
+    assert "A gravação está parada" in today.text and "Iniciar gravação" in today.text
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, 1).enabled is False
+    cameras = client.post("/cameras/1/start")
+    assert "Gravação iniciada: Porta." in cameras.text and "Parar gravação" in cameras.text
+    assert client.post("/cameras/99/start").status_code == 404
 
 
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):

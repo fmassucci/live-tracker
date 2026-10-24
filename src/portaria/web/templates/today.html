@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import switch_button %}
 {% block title %}{{ t("Today") }}{% endblock %}
 {% block content %}
 <div class="today-head">
@@ -13,19 +14,24 @@
 
 <div class="today">
   <div>
-    <div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if door_camera and service_up %}data-state-url="/cameras/{{ door_camera.id }}/state"{% endif %}>
-      {% if door_camera and service_up %}
-      <img src="/cameras/{{ door_camera.id }}/stream" alt="{{ t('Live image from {name}', name=door_camera.name) }}">
-      {% elif door_camera %}
+    <div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if door_state in ("recording", "no-image") %}data-state-url="/cameras/{{ door_camera.id }}/state"{% endif %}>
+      {% if not door_camera %}
+      <div class="video-empty">
+        <p>{{ t("No door camera yet.") }}</p>
+        <a href="/cameras/new">{{ t("Add a camera") }}</a>
+      </div>
+      {% elif door_state == "stopped" %}
+      <div class="video-empty">
+        <p>{{ t("Recording is stopped: nobody is recognized at this door.") }}</p>
+        {{ switch_button(door_camera, "/", t) }}
+      </div>
+      {% elif door_state == "service-down" %}
       <div class="video-empty">
         <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
         <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
       </div>
       {% else %}
-      <div class="video-empty">
-        <p>{{ t("No door camera yet.") }}</p>
-        <a href="/cameras/new">{{ t("Add a camera") }}</a>
-      </div>
+      <img src="/cameras/{{ door_camera.id }}/stream" alt="{{ t('Live image from {name}', name=door_camera.name) }}">
       {% endif %}
       {% include "_door_caption.html" %}
       <p class="video-label" data-video-label aria-live="polite"></p>

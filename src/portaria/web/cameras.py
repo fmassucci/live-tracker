@@ -13,7 +13,9 @@ from sqlalchemy import select
 from portaria import onvif
 from portaria.camera import probe, redact
 from portaria.db import CAMERAS_VERSION, Camera, audit, bump
-from portaria.web.common import KINDS, flash, fragment, page, require_user, services, translator
+from portaria.web.common import (
+    KINDS, flash, fragment, page, recording_state, require_user, safe_next, services, translator,
+)
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
@@ -28,27 +30,28 @@ def camera_list(request: Request) -> HTMLResponse:
         cameras = session.scalars(select(Camera).order_by(Camera.role, Camera.name)).all()
     status = s.vision.status()
     statuses = status.get("cameras", {}) if status else {}
-    return page(request, "cameras.html", section="cameras", cameras=cameras, statuses=statuses,
+    states = {c.id: recording_state(c, statuses.get(str(c.id)), status is not None) for c in cameras}
+    return page(request, "cameras.html", section="cameras", cameras=cameras, statuses=statuses, states=states,
                 service_up=status is not None, roles=ROLES)
 
 
 @router.get("/cameras/new", response_class=HTMLResponse)
 def camera_new(request: Request) -> HTMLResponse:
-    return page(request, "camera_form.html", section="cameras", camera=None, form={"role": "door", "enabled": True},
-                roles=ROLES, error="")
+    return page(request, "camera_form.html", section="cameras", camera=None, form={"role": "door"}, roles=ROLES,
+                error="")
 
 
 @router.post("/cameras/new", response_model=None)
 def camera_create(
-    request: Request, name: str = Form(""), url: str = Form(""), role: str = Form("door"), enabled: bool = Form(False)
+    request: Request, name: str = Form(""), url: str = Form(""), role: str = Form("door")
 ) -> HTMLResponse | RedirectResponse:
     error = _camera_error(name, url, role)
     if error:
-        form = {"name": name, "url": url, "role": role, "enabled": enabled}
+        form = {"name": name, "url": url, "role": role}
         return page(request, "camera_form.html", section="cameras", camera=None, form=form, roles=ROLES,
                     error=error, status_code=400)
     with services(request).db.session() as session:
-        camera = Camera(name=name.strip(), url=url.strip(), role=role, enabled=enabled)
+        camera = Camera(name=name.strip(), url=url.strip(), role=role, enabled=True)  # starts right away
         session.add(camera)
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera added", name.strip())
@@ -58,30 +61,61 @@ def camera_create(
 
 @router.get("/cameras/{camera_id}", response_class=HTMLResponse)
 def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
-    with services(request).db.session() as session:
+    s = services(request)
+    with s.db.session() as session:
         camera = _get(session, camera_id)
-    form = {"name": camera.name, "url": redact(camera.url), "role": camera.role, "enabled": camera.enabled}
-    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES, error="")
+    form = {"name": camera.name, "url": redact(camera.url), "role": camera.role}
+    status = s.vision.status()
+    state = recording_state(camera, status.get("cameras", {}).get(str(camera_id)) if status else None, status is not None)
+    return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES, state=state,
+                error="")
 
 
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
-    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), role: str = Form("door"),
-    enabled: bool = Form(False),
+    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), role: str = Form("door")
 ) -> HTMLResponse | RedirectResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
         url = _keep_password(camera, url)
         error = _camera_error(name, url, role)
         if error:
-            form = {"name": name, "url": redact(url), "role": role, "enabled": enabled}
+            form = {"name": name, "url": redact(url), "role": role}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, roles=ROLES,
-                        error=error, status_code=400)
-        camera.name, camera.url, camera.role, camera.enabled = name.strip(), url.strip(), role, enabled
+                        state=None, error=error, status_code=400)
+        camera.name, camera.url, camera.role = name.strip(), url.strip(), role
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera changed", camera.name)
     flash(request, "Changes saved.")
     return RedirectResponse("/cameras", status_code=303)
+
+
+@router.post("/cameras/{camera_id}/start")
+def camera_start(request: Request, camera_id: int, next: str = Form("/cameras")) -> RedirectResponse:
+    return _switch(request, camera_id, True, next)
+
+
+@router.post("/cameras/{camera_id}/stop")
+def camera_stop(request: Request, camera_id: int, next: str = Form("/cameras")) -> RedirectResponse:
+    return _switch(request, camera_id, False, next)
+
+
+def _switch(request: Request, camera_id: int, on: bool, next: str) -> RedirectResponse:
+    """Starts or stops a camera. The recognition service picks it up within a second."""
+    with services(request).db.session() as session:
+        camera = _get(session, camera_id)
+        camera.enabled = on
+        bump(session, CAMERAS_VERSION)
+        audit(session, request.session["user"], "camera started" if on else "camera stopped", camera.name)
+        name, door = camera.name, camera.role == "door"
+    if door and on:
+        flash(request, "Recording started: {name}.", name=name)
+    elif door:
+        flash(request, "Recording stopped: {name}. Nobody is recognized at this door until you start it again.",
+              "warn", name=name)
+    else:
+        flash(request, "Camera turned on: {name}." if on else "Camera turned off: {name}.", name=name)
+    return RedirectResponse(safe_next(next), status_code=303)
 
 
 @router.post("/cameras/{camera_id}/delete")

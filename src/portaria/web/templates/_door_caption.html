@@ -1,14 +1,8 @@
-{# Chips over the live image: which camera and whether it is sending. Refreshed in place on Today. #}
-{% set sending = service_up and camera_status and camera_status.online %}
+{# Chips over the live image: whether the door camera is recording, and its name. Refreshed in place on Today. #}
+{% from "_macros.html" import camera_chip %}
 <div class="video-chips" id="door-caption" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if door_camera %}
-  <span class="glass"><span class="live-dot{% if not sending %} is-off{% endif %}"></span>{{ door_camera.name }}</span>
-  {% if sending %}
-  <span class="glass">{{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}</span>
-  {% elif service_up %}
-  <span class="glass">{{ t("No image") }}</span>
-  {% else %}
-  <span class="glass">{{ t("Recognition service stopped") }}</span>
-  {% endif %}
+  {{ camera_chip(door_state, t(recording_states[door_state]), "glass") }}
+  <span class="glass">{{ door_camera.name }}</span>
   {% endif %}
 </div>

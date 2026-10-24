@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from portaria.config import Config
-from portaria.db import Database, get_setting
+from portaria.db import Camera, Database, get_setting
 from portaria.faces import BLURRY, NO_FACE, SEVERAL_FACES, TOO_SMALL, TURNED_AWAY
 from portaria.i18n import Translator
 from portaria.images import read_image
@@ -20,7 +20,7 @@ from portaria.people import People
 from portaria.users import user_exists
 from portaria.web.vision_client import VisionClient
 
-ASSET_VERSION = "7"  # bump to make browsers reload the stylesheet and scripts
+ASSET_VERSION = "8"  # bump to make browsers reload the stylesheet and scripts
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -37,6 +37,26 @@ PHOTO_PROBLEMS = {
 CATEGORIES = {"employee": "Employee", "contractor": "Contractor", "visitor": "Visitor"}
 KINDS = {"recognized": "Recognized", "unknown": "Not recognized", "spoof": "Photo or screen suspected"}
 DOOR_RESULTS = {"opened": "door opened", "shadow": "test mode, door stayed closed", "kept": "door stayed closed"}
+
+# What a camera is doing, as its chip says it. Door cameras record a photo of each entry, never video.
+RECORDING_STATES = {
+    "recording": "Recording",
+    "live": "Live, not recording",
+    "stopped": "Stopped",
+    "no-image": "No image, not recording",
+    "service-down": "Recognition service stopped",
+}
+
+
+def recording_state(camera: Camera, status: dict | None, service_up: bool) -> str:
+    """A key of RECORDING_STATES, from the camera's setting and its status in the recognition service."""
+    if not camera.enabled:
+        return "stopped"
+    if not service_up:
+        return "service-down"
+    if not status or not status.get("online"):
+        return "no-image"
+    return "recording" if camera.role == "door" else "live"
 
 
 @dataclass
@@ -113,6 +133,7 @@ def _render(request: Request, template: str, section: str, status_code: int, fla
             "hidden_notices": request.session.get("hidden_notices", []),
             "asset_version": ASSET_VERSION,
             "categories": CATEGORIES,
+            "recording_states": RECORDING_STATES,
             **context,
         },
         status_code=status_code,

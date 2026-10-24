@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import camera_chip, switch_button %}
 {% block title %}{{ t("Live") }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -19,19 +20,23 @@
   <a class="button" href="/cameras/new">{{ t("Add a camera") }}</a>
 </div>
 {% else %}
-{% set sending = service_up and camera_status and camera_status.online %}
-<div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if service_up and chosen.role == "door" %}data-state-url="/cameras/{{ chosen.id }}/state"{% endif %}>
-  {% if service_up %}
-  <img src="/cameras/{{ chosen.id }}/stream" alt="{{ t('Live image from {name}', name=chosen.name) }}">
-  {% else %}
+<div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if chosen.role == "door" and state in ("recording", "no-image") %}data-state-url="/cameras/{{ chosen.id }}/state"{% endif %}>
+  {% if state == "stopped" %}
+  <div class="video-empty">
+    <p>{{ t("Recording is stopped: nobody is recognized at this door.") if chosen.role == "door" else t("This camera is turned off.") }}</p>
+    {{ switch_button(chosen, "/live/" ~ chosen.id, t) }}
+  </div>
+  {% elif state == "service-down" %}
   <div class="video-empty">
     <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
     <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
   </div>
+  {% else %}
+  <img src="/cameras/{{ chosen.id }}/stream" alt="{{ t('Live image from {name}', name=chosen.name) }}">
   {% endif %}
   <div class="video-chips">
-    <span class="glass"><span class="live-dot{% if not sending %} is-off{% endif %}"></span>{{ chosen.name }}</span>
-    {% if sending %}<span class="glass">{{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}</span>{% endif %}
+    {{ camera_chip(state, t(recording_states[state]), "glass") }}
+    <span class="glass">{{ chosen.name }}{% if state in ("recording", "live") %}, {{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}{% endif %}</span>
   </div>
   <p class="video-label" data-video-label aria-live="polite"></p>
 </div>

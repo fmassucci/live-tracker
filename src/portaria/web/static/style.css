@@ -297,8 +297,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   background: rgba(12, 13, 16, 0.58); color: #fff; font-size: 13px; font-weight: 550;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
 }
-.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
-.live-dot.is-off { background: #ef4444; }
+/* A camera's recording state: a red dot that pulses while it records, like any recorder */
+.camera-state { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.camera-state:not(.glass) {
+  padding: 4px 11px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--surface-2); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line);
+}
+.camera-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #9ca3af; }
+.camera-state-recording .camera-dot { background: #ef4444; animation: recording 1.6s ease-in-out infinite; }
+.camera-state-live .camera-dot { background: #22c55e; }
+.camera-state-no-image .camera-dot, .camera-state-service-down .camera-dot { background: #f59e0b; }
+.camera-state-recording:not(.glass) { background: var(--bad-wash); color: var(--bad); box-shadow: none; }
+.camera-state-no-image:not(.glass), .camera-state-service-down:not(.glass) { background: var(--caution-wash); color: var(--caution); box-shadow: none; }
+@keyframes recording { 50% { opacity: 0.3; } }
 .video-label {
   position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 10px); opacity: 0;
   padding: 8px 16px; border-radius: 999px; background: rgba(12, 13, 16, 0.66); color: #fff;

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, camera_chip, switch_button %}
 {% block title %}{{ t("Edit camera") if camera else t("Add a camera") }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -7,6 +7,12 @@
     <h1>{{ t("Edit camera") if camera else t("Add a camera") }}</h1>
     <p>{{ t("Most IP cameras have a video address (RTSP), like rtsp://user:password@192.168.1.50:554/onvif1. Test it before saving.") }}</p>
   </div>
+  {% if camera and state %}
+  <div class="actions">
+    {{ camera_chip(state, t(recording_states[state])) }}
+    {{ switch_button(camera, "/cameras/" ~ camera.id, t) }}
+  </div>
+  {% endif %}
 </div>
 {% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
 
@@ -29,8 +35,8 @@
         <label class="choice"><input type="radio" name="role" value="{{ key }}" {% if form.role == key %}checked{% endif %}>{{ t(label) }}</label>
         {% endfor %}
       </div>
+      {% if not camera %}<span class="hint">{{ t("A door camera starts recording as soon as you save it. You can stop it at any time.") }}</span>{% endif %}
     </fieldset>
-    <label class="check"><input type="checkbox" name="enabled" value="true" {% if form.enabled %}checked{% endif %}><span>{{ t("Camera on") }}</span></label>
     <div class="actions">
       <button class="button">{{ t("Save camera") }}</button>
       <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>

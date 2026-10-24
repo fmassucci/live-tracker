@@ -11,7 +11,9 @@ from sqlalchemy import func, select
 
 from portaria.db import Camera, Event, Person, Photo
 from portaria.events import face_path
-from portaria.web.common import DOOR_RESULTS, KINDS, fragment, image_response, page, require_user, services
+from portaria.web.common import (
+    DOOR_RESULTS, KINDS, fragment, image_response, page, recording_state, require_user, services,
+)
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
@@ -75,13 +77,14 @@ def _snapshot_path(request: Request, event_id: int) -> Path:
 @router.get("/live/{camera_id}", response_class=HTMLResponse)
 def live(request: Request, camera_id: int | None = None) -> HTMLResponse:
     s = services(request)
-    with s.db.session() as session:
-        cameras = session.scalars(select(Camera).where(Camera.enabled).order_by(Camera.role, Camera.name)).all()
+    with s.db.session() as session:  # stopped cameras too, so they can be started from here
+        cameras = session.scalars(select(Camera).order_by(Camera.enabled.desc(), Camera.role, Camera.name)).all()
     chosen = next((c for c in cameras if c.id == camera_id), cameras[0] if cameras else None)
     status = s.vision.status()
     camera_status = status.get("cameras", {}).get(str(chosen.id)) if status and chosen else None
+    state = recording_state(chosen, camera_status, status is not None) if chosen else None
     return page(request, "live.html", section="cameras", cameras=cameras, chosen=chosen,
-                service_up=status is not None, camera_status=camera_status)
+                service_up=status is not None, camera_status=camera_status, state=state)
 
 
 def _today(request: Request) -> dict:
@@ -111,11 +114,13 @@ def _today(request: Request) -> dict:
         alerts = session.scalars(
             select(Event).where(Event.at >= start, Event.kind != "recognized").order_by(Event.at.desc()).limit(12)
         ).all()
-        door_cameras = session.scalars(
-            select(Camera).where(Camera.enabled, Camera.role == "door").order_by(Camera.id)
+        door_cameras = session.scalars(  # a stopped one too: Today shows that it isn't recording
+            select(Camera).where(Camera.role == "door").order_by(Camera.enabled.desc(), Camera.id)
         ).all()
         people_count = session.scalar(select(func.count()).select_from(Person).where(Person.active))
     status = s.vision.status()
+    door_camera = door_cameras[0] if door_cameras else None
+    camera_status = status.get("cameras", {}).get(str(door_camera.id)) if status and door_camera else None
     return {
         "now": now,
         "entries": entries,
@@ -124,8 +129,9 @@ def _today(request: Request) -> dict:
         "alerts": alerts,
         "kinds": KINDS,
         "door_cameras": door_cameras,
-        "door_camera": door_cameras[0] if door_cameras else None,
-        "camera_status": status.get("cameras", {}).get(str(door_cameras[0].id)) if status and door_cameras else None,
+        "door_camera": door_camera,
+        "camera_status": camera_status,
+        "door_state": recording_state(door_camera, camera_status, status is not None) if door_camera else None,
         "service_up": status is not None,
         "people_count": people_count,
         "just_now": now - timedelta(seconds=REFRESH_S + 1),
