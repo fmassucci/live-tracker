@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import logging
 import os
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -15,8 +17,11 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-# Cheap Wi-Fi cameras lose UDP packets, which smears frames; RTSP over TCP keeps them intact.
-os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+# Cheap Wi-Fi cameras lose UDP packets, which smears frames, so RTSP video goes over TCP when the
+# camera can. Some cameras only stream over UDP and answer a TCP request with a reply FFmpeg rejects.
+TRANSPORTS = ("tcp", "udp")
+OPEN_TIMEOUT_MS = 5000
+_options_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -27,11 +32,28 @@ class Frame:
     signature: bytes    # equal for bit-identical frames, i.e. a stream repeating itself
 
 
-def open_capture(source: str) -> cv2.VideoCapture:
+def open_capture(source: str, transport: str = "tcp") -> cv2.VideoCapture:
     if source.isdigit():
         return cv2.VideoCapture(int(source))
-    timeouts = [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000]
-    return cv2.VideoCapture(source, cv2.CAP_FFMPEG, timeouts)
+    timeouts = [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, OPEN_TIMEOUT_MS, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000]
+    with _options_lock:  # the options are process-wide and read while the capture opens
+        _set_ffmpeg_options(f"rtsp_transport;{transport}")
+        return cv2.VideoCapture(source, cv2.CAP_FFMPEG, timeouts)
+
+
+def _set_ffmpeg_options(options: str) -> None:
+    """OpenCV reads FFmpeg's options from the environment each time a capture opens.
+
+    On Windows its FFmpeg plugin is a MinGW build that reads msvcrt.dll's own copy of the
+    environment, which os.environ doesn't update, so the options are set there too.
+    """
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = options
+    if sys.platform == "win32":
+        ctypes.cdll.msvcrt._putenv(f"OPENCV_FFMPEG_CAPTURE_OPTIONS={options}".encode())
+
+
+def is_rtsp(source: str) -> bool:
+    return source.lower().startswith("rtsp")
 
 
 def redact(source: str) -> str:
@@ -81,11 +103,14 @@ class Camera:
 
     def _run(self) -> None:
         seq = 0
+        transport = TRANSPORTS[0]
         while not self._stop.is_set():
-            capture = open_capture(self._source)
+            capture = open_capture(self._source, transport)
             if capture.isOpened():
-                log.info("camera connected: %s", redact(self._source))
+                log.info("camera connected: %s%s", redact(self._source), " over UDP" if transport == "udp" else "")
                 seq = self._read_until_failure(capture, seq)
+            elif is_rtsp(self._source):  # the camera may only stream over the other transport
+                transport = "udp" if transport == "tcp" else "tcp"
             capture.release()
             if self._stop.is_set() or (self._is_file and not self._loop):
                 break
@@ -114,7 +139,14 @@ class Camera:
 
 def probe(source: str, seconds: float = 3.0) -> tuple[dict[str, object], np.ndarray | None]:
     """Stream properties, as reported and as measured over `seconds`, plus the last frame read."""
-    capture = open_capture(source)
+    for transport in (TRANSPORTS if is_rtsp(source) else TRANSPORTS[:1]):
+        started = time.monotonic()
+        capture = open_capture(source, transport)
+        if capture.isOpened():
+            break
+        capture.release()
+        if time.monotonic() - started > OPEN_TIMEOUT_MS / 2000:
+            break  # the camera didn't answer, and the other transport won't change that
     if not capture.isOpened():
         return {"opened": False}, None
     fourcc = int(capture.get(cv2.CAP_PROP_FOURCC)) & 0xFFFFFFFF
@@ -122,6 +154,7 @@ def probe(source: str, seconds: float = 3.0) -> tuple[dict[str, object], np.ndar
         "opened": True,
         "size": f"{int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))}",
         "codec": fourcc.to_bytes(4, "little").decode(errors="replace").strip("\x00 ") or "?",
+        "transport": transport.upper() if is_rtsp(source) else "",
         "reported_fps": round(capture.get(cv2.CAP_PROP_FPS), 1),
     }
     frames, last, start = 0, None, time.monotonic()
