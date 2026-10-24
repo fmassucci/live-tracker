@@ -106,8 +106,9 @@ def _probe(cfg: Config, args: argparse.Namespace) -> int:
     if not info["opened"]:
         print("could not open it: wrong URL or password, or the camera has no RTSP")
         return 1
-    for key in ("size", "codec", "reported_fps", "measured_fps"):
-        print(f"{key}: {info[key]}")
+    for key in ("size", "codec", "transport", "reported_fps", "measured_fps"):
+        if info[key] != "":  # transport is empty for webcams and files
+            print(f"{key}: {info[key]}")
     if image is not None:
         path = cfg.paths.data_dir / "probe.jpg"
         write_jpeg(path, image)
