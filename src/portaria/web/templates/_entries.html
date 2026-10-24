@@ -5,22 +5,39 @@
     <span class="count" title="{{ t('In: {count}', count=entries | length) }}">{{ entries | length }}</span>
   </div>
   {% if entries %}
-  <ol class="entry-list">
-    {% for e in entries %}
-    <li class="entry{% if e.first >= just_now %} is-new{% endif %}">
-      {{ avatar(avatars.get(e.person_id), e.name) }}
-      <div>
-        {% if e.person_id %}<a class="entry-name" href="/people/{{ e.person_id }}">{{ e.name }}</a>{% else %}<span class="entry-name">{{ e.name }}</span>{% endif %}
-        {% if e.visits > 1 %}
-        <span class="entry-meta">{{ t("Last seen at {time}", time=e.last.strftime("%H:%M")) }}</span>
-        {% elif e.job %}
-        <span class="entry-meta">{{ e.job }}</span>
+  {# Every later recognition at the door means the person went out and came back: a return.
+     The return column appears once somebody has one. #}
+  {% set returns = entries | selectattr("visits", "gt", 1) | list | length > 0 %}
+  <table class="entry-table">
+    <thead>
+      <tr>
+        <th scope="col" colspan="2"><span class="visually-hidden">{{ t("Person") }}</span></th>
+        <th scope="col">{{ t("Arrival") }}</th>
+        {% if returns %}<th scope="col">{{ t("Return") }}</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr class="entry{% if e.first >= just_now %} is-new{% endif %}">
+        <td class="entry-face">{{ avatar(avatars.get(e.person_id), e.name) }}</td>
+        <th scope="row" class="entry-who">
+          {% if e.person_id %}<a class="entry-name" href="/people/{{ e.person_id }}">{{ e.name }}</a>{% else %}<span class="entry-name">{{ e.name }}</span>{% endif %}
+          {% set role = e.job or (t(categories[e.category]) if e.category in categories else "") %}
+          {% if role %}<span class="entry-meta">{{ role }}</span>{% endif %}
+        </th>
+        <td><time class="entry-time" datetime="{{ e.first.isoformat() }}">{{ e.first.strftime("%H:%M") }}</time></td>
+        {% if returns %}
+        <td>
+          {% if e.visits > 1 %}
+          <time class="entry-return" datetime="{{ e.last.isoformat() }}">{{ e.last.strftime("%H:%M") }}</time>
+          {% if e.visits > 2 %}<span class="entry-meta">{{ t("{count} times", count=e.visits - 1) }}</span>{% endif %}
+          {% endif %}
+        </td>
         {% endif %}
-      </div>
-      <time class="entry-time" datetime="{{ e.first.isoformat() }}">{{ e.first.strftime("%H:%M") }}</time>
-    </li>
-    {% endfor %}
-  </ol>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% else %}
   <p class="entries-empty">{{ t("Nobody has come in yet today. Names appear here as the door camera recognizes people.") }}</p>
   {% endif %}

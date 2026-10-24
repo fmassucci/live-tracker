@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, time
 from types import SimpleNamespace
 
 import cv2
@@ -161,18 +161,35 @@ def test_open_pages_can_follow_every_camera(client, app):
     assert states == {"1": {"state": "service-down", "label": "Serviço de reconhecimento parado"}}
 
 
+def _event(kind: str, name: str | None, at: datetime | None = None) -> Event:
+    return Event(at=at or datetime.now(), kind=kind, person_name=name, score=0.7, door="shadow", model="auraface",
+                 liveness="none")
+
+
 def test_today_lists_who_came_in_and_shows_faces_not_recognized_only_when_there_are_some(client, app):
     assert "Não reconhecidos hoje" not in client.get("/").text
-
-    def event(kind: str, name: str | None) -> Event:
-        return Event(at=datetime.now(), kind=kind, person_name=name, score=0.7, door="shadow", model="auraface",
-                     liveness="none")
-
     with app.state.services.db.session() as session:
-        session.add_all([event("recognized", "Ana Souza"), event("unknown", None)])
+        session.add_all([_event("recognized", "Ana Souza"), _event("unknown", None)])
     today = client.get("/").text
     assert "Ana Souza" in today and "Não reconhecidos hoje" in today
     assert "Ainda não chegaram" not in today
+
+
+def test_each_entry_shows_the_arrival_and_the_last_return(client, app):
+    def recognized_at(hour: int, minute: int) -> None:
+        with app.state.services.db.session() as session:
+            session.add(_event("recognized", "Ana Souza", datetime.combine(date.today(), time(hour, minute))))
+
+    recognized_at(7, 58)
+    today = client.get("/").text
+    assert "Chegada" in today and ">07:58</time>" in today
+    assert "Retorno" not in today  # the column appears once somebody went out and came back
+    recognized_at(12, 10)
+    today = client.get("/").text
+    assert "Retorno" in today and ">12:10</time>" in today and "vezes" not in today
+    recognized_at(13, 5)
+    today = client.get("/").text
+    assert ">07:58</time>" in today and ">13:05</time>" in today and "2 vezes" in today
 
 
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):

@@ -98,13 +98,14 @@ def _today(request: Request) -> dict:
                 Event.person_id,
                 func.coalesce(Person.name, Event.person_name).label("name"),
                 func.coalesce(Person.job_title, "").label("job"),
+                func.coalesce(Person.category, "").label("category"),
                 func.min(Event.at).label("first"),
                 func.max(Event.at).label("last"),
                 func.count().label("visits"),
             )
             .outerjoin(Person, Person.id == Event.person_id)
             .where(Event.at >= start, Event.kind == "recognized")
-            .group_by(Event.person_id, "name", "job")
+            .group_by(Event.person_id, "name", "job", "category")
             .order_by(func.min(Event.at))
         ).all()
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())

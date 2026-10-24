@@ -338,14 +338,25 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 .face-note { color: var(--bad); font-weight: 600; }
 .entries { padding: 18px 20px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-.entry-list { list-style: none; margin: 0; padding: 0; }
-.entry { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 6px; margin: 0 -6px; border-radius: var(--radius-control); }
-.entry + .entry { box-shadow: 0 -1px 0 var(--line); }
-.entry-name { display: block; font-weight: 600; color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A ledger: one label per time column, so the times line up down the list. Rows reach 6px past
+   the panel's text on each side, for the glow of someone who just arrived. */
+.entry-table { width: calc(100% + 12px); margin: 0 -6px; border-collapse: separate; border-spacing: 0; }
+.entry-table th, .entry-table td { padding: 11px 0 11px 16px; line-height: 20px; text-align: right; white-space: nowrap; vertical-align: baseline; }
+.entry-table thead th { padding-top: 4px; padding-bottom: 4px; font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+.entry-table tr > :first-child { padding-left: 6px; }
+.entry-table tr > :last-child { padding-right: 6px; }
+.entry-table tbody tr + tr > * { border-top: 1px solid var(--line); }
+.entry-table .entry-face { width: 40px; vertical-align: middle; }
+/* Without max-width: none, the img rule's max-width: 100% lets the table squeeze the photo to nothing. */
+.entry-face img.avatar { display: block; max-width: none; }
+.entry-table .entry-who { width: 100%; max-width: 0; padding-left: 12px; text-align: left; font-weight: inherit; }
+.entry-name, .entry-who .entry-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-name { font-weight: 600; color: var(--ink); text-decoration: none; }
 a.entry-name:hover { color: var(--orange-ink); }
-.entry-meta { font-size: 13px; color: var(--ink-3); }
+.entry-meta { display: block; font-size: 13px; color: var(--ink-3); }
 .entry-time { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-.entry.is-new { animation: arrive 1600ms ease-out; }
+.entry-return { font-size: 15px; font-weight: 500; color: var(--ink-2); }
+.entry.is-new > * { animation: arrive 1600ms ease-out; }
 @keyframes arrive { from { background: color-mix(in srgb, var(--ok-dot) 22%, transparent); } to { background: transparent; } }
 .entries-empty { padding: 18px 0 6px; color: var(--ink-2); }
 
