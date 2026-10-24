@@ -342,12 +342,6 @@ a.entry-name:hover { color: var(--orange-ink); }
 .entry.is-new { animation: arrive 1600ms ease-out; }
 @keyframes arrive { from { background: color-mix(in srgb, var(--ok-dot) 22%, transparent); } to { background: transparent; } }
 .entries-empty { padding: 18px 0 6px; color: var(--ink-2); }
-.absent { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
-.absent h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.absent ul { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
-.absent li { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border-radius: 999px; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
-.absent .avatar { width: 26px; height: 26px; filter: grayscale(1); opacity: 0.8; }
-.absent .avatar-empty { font-size: 11px; }
 
 /* People */
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 16px; }

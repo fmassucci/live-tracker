@@ -24,12 +24,4 @@
   {% else %}
   <p class="entries-empty">{{ t("Nobody has come in yet today. Names appear here as the door camera recognizes people.") }}</p>
   {% endif %}
-  {% if not_in %}
-  <div class="absent">
-    <h3>{{ t("Not in yet") }} <span class="count">{{ not_in | length }}</span></h3>
-    <ul>
-      {% for p in not_in %}<li>{{ avatar(avatars.get(p.id), p.name) }}{{ p.name }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
 </section>

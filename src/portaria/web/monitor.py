@@ -107,17 +107,12 @@ def _today(request: Request) -> dict:
             .order_by(func.min(Event.at))
         ).all()
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
-        arrived = {e.person_id for e in entries}
-        expected = session.scalars(
-            select(Person).where(Person.active, Person.door_access, Person.category == "employee").order_by(Person.name)
-        ).all()
         alerts = session.scalars(
             select(Event).where(Event.at >= start, Event.kind != "recognized").order_by(Event.at.desc()).limit(12)
         ).all()
         door_cameras = session.scalars(  # a stopped one too: Today shows that it isn't recording
             select(Camera).where(Camera.role == "door").order_by(Camera.enabled.desc(), Camera.id)
         ).all()
-        people_count = session.scalar(select(func.count()).select_from(Person).where(Person.active))
     status = s.vision.status()
     door_camera = door_cameras[0] if door_cameras else None
     camera_status = status.get("cameras", {}).get(str(door_camera.id)) if status and door_camera else None
@@ -125,7 +120,6 @@ def _today(request: Request) -> dict:
         "now": now,
         "entries": entries,
         "avatars": avatars,
-        "not_in": [p for p in expected if p.id not in arrived],
         "alerts": alerts,
         "kinds": KINDS,
         "door_cameras": door_cameras,
@@ -133,7 +127,6 @@ def _today(request: Request) -> dict:
         "camera_status": camera_status,
         "door_state": recording_state(door_camera, camera_status, status is not None) if door_camera else None,
         "service_up": status is not None,
-        "people_count": people_count,
         "just_now": now - timedelta(seconds=REFRESH_S + 1),
     }
 
