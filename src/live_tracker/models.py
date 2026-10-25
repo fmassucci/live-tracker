@@ -128,7 +128,7 @@ CATALOG = (
     Model("objects", "People and objects",
           "80 kinds of things, among them people, cell phones, animals and vehicles.", ("yolox",), "OpenCV (YOLOX-S)",
           on_cameras=True),
-    Model("dfine_m", "People and objects, more accurate",
+    Model("dfine_m", "People and objects in detail",
           "D-FINE-M finds more than YOLOX-S, and takes about 0.3 s per picture instead of 0.12. Choose it in the "
           "People and objects settings of each camera.", ("dfine_m",), "USTC (D-FINE-M)", part_of="objects"),
     Model("fire", "Fire and smoke", "Warns of fire and smoke, in addition to the smoke detectors.",
