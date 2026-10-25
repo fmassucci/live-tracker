@@ -3,7 +3,7 @@
 {% block title %}{{ t("Cameras") }}{% endblock %}
 {% block toasts %}
 {% if not service_up %}
-{% call toast("bad", "alert", t("Close")) %}{{ t("The recognition service is not running, so there is no image. Start it on the server with: python -m portaria run") }}{% endcall %}
+{% call toast("bad", "alert", t("Close")) %}{{ t("The recognition service is not running, so there is no image. To start it, double-click Portaria on the desktop of the computer where the system is installed.") }}{% endcall %}
 {% endif %}
 {% endblock %}
 {% block content %}
