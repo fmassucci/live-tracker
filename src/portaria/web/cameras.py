@@ -78,7 +78,7 @@ def camera_list(request: Request) -> HTMLResponse:
 def camera_new(request: Request) -> HTMLResponse:
     analyses = _analyses(request)
     form = {"analysis": "faces" if "faces" in analyses else "", "device": "", "record_mode": APPEAR,
-            **_every_fields(DEFAULT_EVERY_S)}
+            "record_while_present": True, **_every_fields(DEFAULT_EVERY_S)}
     return page(request, "camera_form.html", section="cameras", camera=None, form=form, objects=ObjectSettings(),
                 **_other_settings(), error="", **_choices(request, analyses))
 
@@ -88,7 +88,8 @@ def camera_create(
     request: Request, name: str = Form(""), url: str = Form(""), analysis: str = Form(""), device: str = Form(""),
     kinds: list[str] = Form([]), confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
     objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
-    every_unit: str = Form("min"), others: dict[str, ObjectSettings] = Depends(_sent_settings),
+    every_unit: str = Form("min"), record_while_present: bool = Form(False),
+    others: dict[str, ObjectSettings] = Depends(_sent_settings),
 ) -> HTMLResponse | RedirectResponse:
     analyses = _analyses(request)
     objects = ObjectSettings.of({"kinds": kinds, "confidence": confidence, "min_seconds": min_seconds, "fps": fps,
@@ -98,7 +99,7 @@ def camera_create(
              or _fire_error(analysis, others) or _record_error(record_mode, every_s))
     if error:
         form = {"name": name, "url": url, "analysis": analysis, "device": device, "record_mode": record_mode,
-                "every_value": every_value, "every_unit": every_unit}
+                "every_value": every_value, "every_unit": every_unit, "record_while_present": record_while_present}
         return page(request, "camera_form.html", section="cameras", camera=None, form=form,
                     objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                     **_choices(request, analyses))
@@ -107,7 +108,7 @@ def camera_create(
         camera = Camera(name=name.strip(), url=url.strip(), analysis=analysis, device=device,
                         model_settings=settings.dumps() if settings else "{}",
                         record_mode=record_mode, record_every_s=every_s or DEFAULT_EVERY_S,
-                        enabled=True)  # starts recording right away
+                        record_while_present=record_while_present, enabled=True)  # starts recording right away
         session.add(camera)
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera added", name.strip())
@@ -120,7 +121,8 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
     form = {"name": camera.name, "url": redact(camera.url), "analysis": camera.analysis, "device": camera.device,
-            "part": camera.part, "record_mode": camera.record_mode, **_every_fields(camera.record_every_s)}
+            "part": camera.part, "record_mode": camera.record_mode, "record_while_present": camera.record_while_present,
+            **_every_fields(camera.record_every_s)}
     return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                 objects=ObjectSettings.parse(camera.model_settings), **_other_settings(camera), error="",
                 **_live(request, camera), **_choices(request, _analyses(request, camera.analysis)))
@@ -132,7 +134,8 @@ def camera_update(
     device: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
     confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
     objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
-    every_unit: str = Form("min"), others: dict[str, ObjectSettings] = Depends(_sent_settings),
+    every_unit: str = Form("min"), record_while_present: bool = Form(False),
+    others: dict[str, ObjectSettings] = Depends(_sent_settings),
 ) -> HTMLResponse | RedirectResponse:
     objects = ObjectSettings.of({"kinds": kinds, "confidence": confidence, "min_seconds": min_seconds, "fps": fps,
                                  "model": objects_model})
@@ -146,13 +149,15 @@ def camera_update(
                  or _fire_error(analysis, others) or _record_error(record_mode, every_s))
         if error:
             form = {"name": name, "url": redact(url), "analysis": analysis, "device": device, "part": part,
-                    "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit}
+                    "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
+                    "record_while_present": record_while_present}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                         objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                         **_live(request, camera), **_choices(request, analyses))
         camera.name, camera.url, camera.part = name.strip(), url.strip(), part
         camera.analysis, camera.device = analysis, device
         camera.record_mode, camera.record_every_s = record_mode, every_s or camera.record_every_s
+        camera.record_while_present = record_while_present
         settings = objects if analysis == "objects" else others.get(analysis)
         if settings:  # face recognition keeps the last ones, in case the camera comes back to them
             camera.model_settings = settings.dumps()
@@ -368,7 +373,10 @@ def _rule(t: Translator, camera: Camera) -> str:
     """When the camera keeps a photo, as its card on the Cameras page says it."""
     if camera.record_mode == INTERVAL:
         fields = _every_fields(camera.record_every_s)
-        return t("Every {every}", every=f"{fields['every_value']}\u00a0{fields['every_unit']}")
+        every = f"{fields['every_value']}\u00a0{fields['every_unit']}"
+        if camera.record_while_present:
+            return t("Every {every}", every=every)
+        return t("Every {every}, when it comes back", every=every)
     return t(RECORD_MODES.get(camera.record_mode, RECORD_MODES[APPEAR]))
 
 

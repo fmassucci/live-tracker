@@ -1,6 +1,8 @@
 import time
+from datetime import datetime, timedelta
 
 import numpy as np
+import pytest
 from sqlalchemy import select
 
 from portaria import service
@@ -10,7 +12,7 @@ from portaria.db import Camera as CameraRow
 from portaria.decision import Decision
 from portaria.pipeline import Result
 from portaria.objects import ObjectAnalyzer, Sighting
-from portaria.recording import DAILY, INTERVAL, RecordRule, thing
+from portaria.recording import DAILY, INTERVAL, RecordGate, RecordRule, thing
 from portaria.service import CameraSpec, VisionService
 
 
@@ -104,8 +106,65 @@ def test_a_camera_keeps_photos_by_its_rule_also_after_a_restart(cfg, monkeypatch
     worker = service.CameraWorker(spec, vision, FakeSource(spec.url))  # started again, later the same day
     assert worker.gate.rule == RecordRule(DAILY)
     assert not worker.gate.allow(thing("person")) and worker.gate.allow(thing("dog"))
-    every = CameraSpec(2, "Sala", "0", analysis="objects", record_mode=INTERVAL, record_every_s=600)
-    assert service.CameraWorker(every, vision, FakeSource("0")).gate.rule.repeat_s == 600
+    every = CameraSpec(2, "Sala", "0", analysis="objects", record_mode=INTERVAL, record_every_s=600,
+                       record_while_present=False)
+    assert service.CameraWorker(every, vision, FakeSource("0")).gate.rule == RecordRule(INTERVAL, 600, False)
+
+
+def test_someone_still_there_is_photographed_again_without_opening_the_door(cfg, monkeypatch):
+    vision = _vision(cfg, monkeypatch)
+    vision._door, vision._door_allowed = FakeDoor(), {"7"}
+    frame = Frame(np.zeros((120, 160, 3), np.uint8), seq=1, captured_at=0.0, signature=b"")
+    still_there = Result(staying=Decision("recognized", "7", 0.8, staying=True))
+    vision.on_staying(CameraSpec(None, "Staff door", "rtsp://door", device="door"), frame, still_there)
+    assert vision._door.opened == []
+    with vision.db.session() as session:
+        event = session.scalars(select(Event)).one()
+        assert (event.kind, event.door, event.score) == ("recognized", "", 0.8)  # a photo, not an entry
+
+
+class Frames:
+    """A camera that sends a few different pictures, then ends."""
+
+    def __init__(self, count: int) -> None:
+        self.count, self.ended = count, False
+
+    def next_frame(self, after_seq: int, timeout: float) -> Frame | None:
+        if after_seq >= self.count:
+            self.ended = True
+            return None
+        seq = after_seq + 1
+        return Frame(np.zeros((120, 160, 3), np.uint8), seq=seq, captured_at=float(seq), signature=bytes([seq]))
+
+
+class Script:
+    """An analysis that answers each picture with the next of its results, five minutes after the one before."""
+
+    def __init__(self, results: list[Result], now: list[datetime]) -> None:
+        self.results, self.now = iter(results), now
+
+    def process(self, frame: Frame, frozen: bool) -> Result:
+        self.now[0] += timedelta(minutes=5)
+        return next(self.results)
+
+
+@pytest.mark.parametrize("while_present, doors", [(True, ["shadow", ""]), (False, ["shadow"])])
+def test_a_person_who_stays_is_photographed_again_if_the_rule_repeats(cfg, monkeypatch, while_present, doors):
+    vision = _vision(cfg, monkeypatch)
+    vision._door, vision._door_allowed = FakeDoor(), {"7"}
+    spec = CameraSpec(None, "Staff door", "rtsp://door", device="door", record_mode=INTERVAL, record_every_s=600,
+                      record_while_present=while_present)
+    worker = service.CameraWorker(spec, vision, Frames(4))
+    now = [datetime(2026, 10, 24, 9, 0)]
+    worker.gate = RecordGate(worker.gate.rule, clock=lambda: now[0])
+    arrived = Result(decision=Decision("recognized", "7", 0.8))
+    still_there = Result(staying=Decision("recognized", "7", 0.8, staying=True))
+    worker.analyzer = Script([arrived, still_there, still_there, still_there], now)  # 9:05, 9:10, 9:15, 9:20
+    monkeypatch.setattr(worker, "_publish", lambda frame, result: None)
+    worker._run()
+    assert len(vision._door.opened) == 1  # only arriving opens the door
+    with vision.db.session() as session:  # 9:05 and, while they stay, 9:15
+        assert [event.door for event in session.scalars(select(Event).order_by(Event.id))] == doors
 
 
 def test_a_camera_waiting_for_its_model_gets_it_once_downloaded(cfg, monkeypatch):

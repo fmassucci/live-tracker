@@ -10,10 +10,13 @@
   "appear-now": t("Records {kinds} as soon as they appear."),
   "interval": t("Records {kinds} after {seconds} s in the picture, and again every {every}."),
   "interval-now": t("Records {kinds} as soon as they appear, and again every {every}."),
+  "interval-back": t("Records {kinds} after {seconds} s in the picture, and again when they come back, at most every {every}."),
+  "interval-back-now": t("Records {kinds} as soon as they appear, and again when they come back, at most every {every}."),
   "daily": t("Records {kinds} once a day, after {seconds} s in the picture."),
   "daily-now": t("Records {kinds} once a day, as soon as they appear."),
 } %}
 {% set mode = form.record_mode if form.record_mode in ("interval", "daily") else "appear" %}
+{% set mode = "interval-back" if mode == "interval" and not form.record_while_present else mode %}
 {% set template = templates[mode ~ ("" if seconds else "-now")]
      .replace("{seconds} ", seconds ~ "\u00a0").replace("{seconds}", seconds | string)
      .replace("{every}", form.every_value ~ "\u00a0" ~ form.every_unit) %}

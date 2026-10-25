@@ -179,15 +179,25 @@ def test_the_camera_page_reads_its_settings_back_as_one_sentence(client, cfg, mo
 def test_a_camera_chooses_when_to_keep_a_photo(client, cfg, monkeypatch):
     place_model_file(cfg.paths.models_dir, monkeypatch, "yolox")
     fields = {"name": "Caixa", "url": "0", "analysis": "objects", "device": "", "kinds": ["person"], "min_seconds": "2",
-              "record_mode": "interval", "every_value": "15", "every_unit": "min"}
-    assert 'name="record_mode" value="appear" checked' in client.get("/cameras/new").text
+              "record_mode": "interval", "every_value": "15", "every_unit": "min", "record_while_present": "true"}
+    new = client.get("/cameras/new").text
+    assert 'name="record_mode" value="appear" checked' in new
+    assert 'name="record_while_present" value="true" checked' in new  # again while it stays, unless turned off
     client.post("/cameras/new", data=fields)
     db = client.app.state.services.db
     with db.session() as session:
-        assert (session.get(Camera, 1).record_mode, session.get(Camera, 1).record_every_s) == ("interval", 900)
+        camera = session.get(Camera, 1)
+        assert (camera.record_mode, camera.record_every_s, camera.record_while_present) == ("interval", 900, True)
     edit = client.get("/cameras/1").text
     assert 'name="record_mode" value="interval" checked' in edit and '<option value="min" selected>' in edit
     assert "Registra <strong>pessoa</strong> depois de 2\u00a0s na imagem, e de novo a cada 15\u00a0min." in edit
+    client.post("/cameras/1", data={key: value for key, value in fields.items() if key != "record_while_present"})
+    with db.session() as session:
+        assert not session.get(Camera, 1).record_while_present  # switched off: only once it comes back
+    edit = client.get("/cameras/1").text
+    assert 'name="record_while_present" value="true" checked' not in edit
+    assert ("Registra <strong>pessoa</strong> depois de 2\u00a0s na imagem, e de novo ao voltar, no máximo a cada "
+            "15\u00a0min.") in edit
     refused = client.post("/cameras/1", data={**fields, "every_value": "3", "every_unit": "s"})
     assert refused.status_code == 400 and "Escolha um intervalo entre 5 segundos e 24 horas." in refused.text
     client.post("/cameras/1", data={**fields, "record_mode": "daily", "every_value": ""})

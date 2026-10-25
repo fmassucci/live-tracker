@@ -55,9 +55,11 @@ class Camera(Base):
     # The analysis's own settings, as JSON: for "objects", the kinds of things to record (objects.ObjectSettings).
     model_settings: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     # When to keep a photo of what the model finds (recording.RecordRule): "appear", each time it appears;
-    # "interval", at most once every record_every_s, and again while it stays; "daily", the first time each day.
+    # "interval", at most once every record_every_s, and again while it stays if record_while_present (otherwise
+    # only once it leaves and comes back); "daily", the first time each day.
     record_mode: Mapped[str] = mapped_column(String(10), default="appear", server_default="appear")
     record_every_s: Mapped[int] = mapped_column(Integer, default=900, server_default="900")
+    record_while_present: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -124,7 +126,8 @@ class Event(Base):
     person_name: Mapped[str | None] = mapped_column(String(120))  # kept even if the person is deleted
     score: Mapped[float] = mapped_column(Float)
     snapshot: Mapped[str | None] = mapped_column(String(300))  # relative to the data folder
-    door: Mapped[str] = mapped_column(String(10))  # "shadow" (logged only), "opened", "kept"; "" away from the door
+    # "shadow" (logged only), "opened", "kept"; "" away from the door, or for another photo of someone still there
+    door: Mapped[str] = mapped_column(String(10))
     model: Mapped[str] = mapped_column(String(20))
     liveness: Mapped[str] = mapped_column(String(20))
 

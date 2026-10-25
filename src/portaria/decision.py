@@ -27,13 +27,16 @@ class Decision:
     kind: Kind
     person: str | None
     score: float  # mean over the frames that agreed
+    staying: bool = False  # the person this visit was recognized as, still there: not a new visit
 
 
 class DecisionMaker:
     """Needs several agreeing frames, then stays quiet until the face has left.
 
     Waiting for the face to leave means a person lingering at the door, or a stream frozen on
-    someone's face, can't trigger the door again and again.
+    someone's face, can't trigger the door again and again. While a recognized person stays, the
+    frames that still agree on them only say so, as staying decisions, for the camera's rule to
+    photograph them again (recording.py); they never open the door.
     """
 
     def __init__(self, cfg: DecisionConfig, accept_threshold: float, min_margin: float) -> None:
@@ -95,8 +98,11 @@ class DecisionMaker:
         self, kind: Kind, person: str | None, votes: list[Observation], now: float, cooldown_s: float
     ) -> Decision | None:
         key = (kind, person if kind == "recognized" else None)
-        if self._decided == key or now < self._cooldown_until.get(key, float("-inf")):
+        score = sum(o.score for o in votes) / len(votes)
+        if self._decided == key:
+            return Decision(kind, person, score, staying=True) if kind == "recognized" else None
+        if now < self._cooldown_until.get(key, float("-inf")):
             return None
         self._decided = key
         self._cooldown_until[key] = now + cooldown_s
-        return Decision(kind, person, sum(o.score for o in votes) / len(votes))
+        return Decision(kind, person, score)

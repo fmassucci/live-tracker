@@ -85,7 +85,7 @@
           <span>
             <strong>{{ t(label) }}</strong>
             {% if key == "interval" %}
-            <span class="model-option-hint only-things">{{ t("One photo when it appears, and another every interval while it stays.") }}</span>
+            <span class="model-option-hint only-things">{{ t("At most one photo of each kind of thing every interval.") }}</span>
             <span class="model-option-hint only-faces">{{ t("At most one photo of each person every interval.") }}</span>
             {% else %}
             <span class="model-option-hint">{{ t(record_hints[key]) }}</span>
@@ -106,6 +106,15 @@
                   data-template="{{ t('Up to {count} photos a day of each person or kind of thing, about {size}.') }}"
                   data-invalid="{{ t('Choose an interval between 5 seconds and 24 hours.') }}"></span>
           </div>
+          {# Off, the interval only spaces out the photos taken each time it comes back. #}
+          <label class="switch">
+            <input type="checkbox" role="switch" name="record_while_present" value="true" {% if form.record_while_present %}checked{% endif %}>
+            <span>
+              <strong>{{ t("Repeat while it stays in the picture") }}</strong>
+              <span class="hint when-on">{{ t("Another photo every interval while it stays.") }}</span>
+              <span class="hint when-off">{{ t("The next photo only after it leaves the picture and comes back.") }}</span>
+            </span>
+          </label>
         </div>
         {% endif %}
         {% endfor %}

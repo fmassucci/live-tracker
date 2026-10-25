@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ from portaria.camera import Frame
 from portaria.objects import (
     KEYS, Detection, ObjectAnalyzer, ObjectDetector, ObjectSettings, Presence, anchors, decode,
 )
+from portaria.recording import APPEAR, INTERVAL, RecordGate, RecordRule, thing
 
 GRIDS, STRIDES = anchors(640)
 
@@ -32,27 +34,41 @@ def test_raw_predictions_become_boxes_in_the_original_picture():
     assert (x, y) == pytest.approx(((20.5 * 8 - width / 2) / 0.5, (1.5 * 8 - height / 2) / 0.5))
 
 
-def test_a_kind_is_recorded_once_per_stay():
+def test_a_kind_is_reported_once_it_has_stayed_then_as_staying_until_it_leaves():
     presence = Presence(min_seconds=2)
     person = [Detection("person", 0.9, np.array([0, 0, 10, 10.0]))]
     assert presence.update(person, now=0.0) == []
     assert presence.update(person, now=1.0) == []
     sightings = presence.update(person + person, now=2.0)
-    assert [(s.kind, s.count) for s in sightings] == [("person", 2)]
-    assert presence.update(person, now=3.0) == []  # still the same stay
+    assert [(s.kind, s.count, s.staying) for s in sightings] == [("person", 2, False)]
+    assert [s.staying for s in presence.update(person, now=3.0)] == [True]  # still the same stay
     assert presence.update([], now=4.0) == []  # missed for a moment
-    assert presence.update(person, now=5.0) == []  # back within 3 s: the same stay
+    assert [s.staying for s in presence.update(person, now=5.0)] == [True]  # back within 3 s: the same stay
     assert presence.update([], now=9.0) == []  # gone for more than 3 s: the stay ends
     assert presence.update(person, now=10.0) == []
-    assert [s.kind for s in presence.update(person, now=12.0)] == ["person"]  # a new stay, recorded again
+    assert [s.staying for s in presence.update(person, now=12.0)] == [False]  # a new stay, reported again
 
 
-def test_a_kind_that_stays_is_reported_again_every_interval():
+def test_the_rule_photographs_a_kind_that_stays_every_interval_or_only_once_it_is_back():
+    """A person in the picture for 200 s, away from 30 s to 40 s and from 70 s to 80 s; a 60 s interval."""
     person = [Detection("person", 0.9, np.array([0, 0, 10, 10.0]))]
-    every_minute = Presence(min_seconds=2, repeat_s=60)
-    assert [t for t in range(200) if every_minute.update(person, now=float(t))] == [2, 62, 122, 182]
-    once = Presence(min_seconds=2)
-    assert [t for t in range(200) if once.update(person, now=float(t))] == [2]
+    start = datetime(2026, 10, 24, 9, 0)
+
+    def photos(rule: RecordRule) -> list[int]:
+        presence, now = Presence(min_seconds=2), [start]
+        gate = RecordGate(rule, clock=lambda: now[0])
+        kept = []
+        for second in range(200):
+            now[0] = start + timedelta(seconds=second)
+            seen = [] if 30 <= second < 40 or 70 <= second < 80 else person
+            for sighting in presence.update(seen, float(second)):  # as the camera's thread does (service.py)
+                if gate.allow(thing(sighting.kind), staying=sighting.staying):
+                    kept.append(second)
+        return kept
+
+    assert photos(RecordRule(INTERVAL, every_s=60)) == [2, 62, 122, 182]  # back at 42, too soon: 62 while it stays
+    assert photos(RecordRule(INTERVAL, every_s=60, while_present=False)) == [2, 82]  # 42 too soon; 82 a return
+    assert photos(RecordRule(APPEAR)) == [2, 42, 82]
 
 
 def test_settings_are_kept_valid_whatever_is_stored():

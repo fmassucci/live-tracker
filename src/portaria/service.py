@@ -20,6 +20,7 @@ from portaria.camera import Camera, Frame, part_of
 from portaria.config import Config
 from portaria.db import CAMERAS_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting
 from portaria.db import Camera as CameraRow
+from portaria.decision import Decision
 from portaria.door import make_door
 from portaria.drawing import Overlay, render
 from portaria.embedders import load_embedder
@@ -65,6 +66,7 @@ class CameraSpec:
     settings: str = "{}"  # the analysis's own settings, as JSON (Camera.model_settings)
     record_mode: str = APPEAR  # when a photo of what the model finds is kept (recording.RecordRule)
     record_every_s: int = DEFAULT_EVERY_S
+    record_while_present: bool = True
 
     @property
     def channel(self) -> str:
@@ -84,7 +86,7 @@ class CameraWorker:
         self._camera = source
         self.analyzer: Recognizer | ObjectAnalyzer | None = None
         self.model_missing = False
-        rule = RecordRule(spec.record_mode, spec.record_every_s)
+        rule = RecordRule(spec.record_mode, spec.record_every_s, spec.record_while_present)
         self.gate = RecordGate(rule, service.last_recorded(spec, rule))
         try:
             if spec.analysis == "faces":
@@ -92,13 +94,13 @@ class CameraWorker:
             elif spec.analysis == "objects":
                 settings = ObjectSettings.parse(spec.settings)
                 detector = service.make_dfine_detector() if settings.model == "dfine_m" else service.make_detector()
-                self.analyzer = ObjectAnalyzer(detector, settings, service.translate, repeat_s=rule.repeat_s)
+                self.analyzer = ObjectAnalyzer(detector, settings, service.translate)
             elif spec.analysis == "fire":
                 self.analyzer = ObjectAnalyzer(service.make_fire_detector(), FireSettings.parse(spec.settings),
-                                               service.translate, repeat_s=rule.repeat_s)
+                                               service.translate)
             elif spec.analysis == "falls":
                 self.analyzer = ObjectAnalyzer(service.make_fall_detector(), FallSettings.parse(spec.settings),
-                                               service.translate, repeat_s=rule.repeat_s, context=(PERSON,))
+                                               service.translate, context=(PERSON,))
         except Exception:  # a missing or damaged model file must not stop the other cameras
             log.exception("camera %s: its AI model can't be loaded", spec.name)
             self.model_missing = True
@@ -141,8 +143,11 @@ class CameraWorker:
                 keep = self.gate.allow(decision_subject(result.decision.kind, result.decision.person))
                 self._service.on_decision(self.spec, frame, result, keep=keep)
                 held, held_until = (result.decision.kind, result.decision.person), time.monotonic() + DECISION_HOLD_S
+            elif result.staying:
+                if self.gate.allow(decision_subject(result.staying.kind, result.staying.person), staying=True):
+                    self._service.on_staying(self.spec, frame, result)
             for sighting in result.sightings:
-                if self.gate.allow(thing(sighting.kind)):
+                if self.gate.allow(thing(sighting.kind), staying=sighting.staying):
                     self._service.on_sighting(self.spec, frame, result, sighting)
             state, person = held if held and time.monotonic() < held_until else (result.state, None)
             self._publish(frame, result)
@@ -265,6 +270,20 @@ class VisionService:
             log.info("%s%s (score %.2f) at %s%s, no photo: the camera's rule", decision.kind, who, decision.score,
                      spec.name, at_door)
             return
+        self._record_face(spec, frame, result, decision, name, door)
+        log.info("%s%s (score %.2f) at %s%s", decision.kind, who, decision.score, spec.name, at_door)
+
+    def on_staying(self, spec: CameraSpec, frame: Frame, result: Result) -> None:
+        """Called from a camera's thread when the camera's rule wants another photo of someone recognized earlier
+        in this visit, still in the picture. It isn't a new visit: no door opens, and the record has no door."""
+        staying = result.staying
+        assert staying is not None and staying.person is not None
+        name = self.gallery.name(staying.person)
+        self._record_face(spec, frame, result, staying, name, door="")
+        log.info("recognized %s (score %.2f) at %s, still there", name, staying.score, spec.name)
+
+    def _record_face(self, spec: CameraSpec, frame: Frame, result: Result, decision: Decision, name: str | None,
+                     door: str) -> None:
         self._events.record(
             decision,
             render(frame.image, result.overlays, [], width=1280),
@@ -275,7 +294,6 @@ class VisionService:
             model=self.cfg.recognition.model,
             liveness=self._liveness.name,
         )
-        log.info("%s%s (score %.2f) at %s%s", decision.kind, who, decision.score, spec.name, at_door)
 
     def on_sighting(self, spec: CameraSpec, frame: Frame, result: Result, sighting: Sighting) -> None:
         """Called from a camera's thread: records a kind of thing that stayed in the picture."""
@@ -320,7 +338,8 @@ class VisionService:
                     rows = session.scalars(select(CameraRow).where(CameraRow.enabled).order_by(CameraRow.id))
                     specs = [CameraSpec(c.id, c.name, c.url, device=c.device, part=c.part, analysis=c.analysis,
                                         settings=c.model_settings, record_mode=c.record_mode,
-                                        record_every_s=c.record_every_s) for c in rows]
+                                        record_every_s=c.record_every_s,
+                                        record_while_present=c.record_while_present) for c in rows]
                 self._apply(specs)
         self._versions = versions
 

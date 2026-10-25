@@ -34,11 +34,13 @@ class Result:
     overlays: list[Overlay] = field(default_factory=list)
     face: Face | None = None
     decision: Decision | None = None
-    sightings: list[Sighting] = field(default_factory=list)  # kinds of things that stayed long enough to record
+    staying: Decision | None = None  # the person this visit was recognized as, recognized again in this frame
+    sightings: list[Sighting] = field(default_factory=list)  # kinds of things in the picture long enough to record
 
 
 class Recognizer:
-    """One frame in, at most one decision out. Only the largest face, the person closest to the camera, counts."""
+    """One frame in, at most one decision out, or word that the person decided on is still there. Only the largest
+    face, the person closest to the camera, counts."""
 
     def __init__(
         self,
@@ -90,7 +92,11 @@ class Recognizer:
         else:  # closest person, for tuning; the "?" keeps it from reading as an identification
             label = f"? {self.gallery.name(match.person)} {match.score:.2f}"
         result.overlays.append(Overlay(face, label, "ok" if accepted else "bad"))
-        result.decision = self.decider.observe(observation)
+        decision = self.decider.observe(observation)
+        if decision and decision.staying:
+            result.staying = decision
+        else:
+            result.decision = decision
         return result
 
 

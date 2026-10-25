@@ -29,8 +29,32 @@ def test_an_interval_keeps_one_photo_of_each_person_or_thing_per_interval():
     clock.advance(minutes=10)
     assert not gate.allow(thing("person"))  # back too soon
     assert gate.allow(thing("dog"))  # each kind counts apart
-    clock.advance(minutes=5, seconds=-0.5)  # the next one is due; a moment early still counts
+    clock.advance(minutes=5)  # the next one is due
     assert gate.allow(thing("person"))
+
+
+def test_an_interval_photographs_again_what_stays_only_if_the_camera_asks():
+    clock = Clock(datetime(2026, 10, 24, 9, 0))
+    repeats = RecordGate(RecordRule(INTERVAL, every_s=900), clock=clock)
+    back_only = RecordGate(RecordRule(INTERVAL, every_s=900, while_present=False), clock=clock)
+    assert repeats.rule.repeats and not back_only.rule.repeats
+    assert repeats.allow(thing("person")) and back_only.allow(thing("person"))
+    clock.advance(minutes=10)
+    assert not repeats.allow(thing("person"), staying=True)  # still there, but the interval isn't over
+    clock.advance(minutes=5)
+    assert repeats.allow(thing("person"), staying=True)  # still there an interval after its last photo
+    assert not back_only.allow(thing("person"), staying=True)  # waits until it leaves and comes back
+    assert back_only.allow(thing("person"))  # back, an interval after its last photo
+    clock.advance(minutes=5)
+    assert not repeats.allow(thing("person"))  # back too soon after the photo taken while it stayed
+
+
+def test_only_an_interval_photographs_what_stays():
+    for rule in (RecordRule(APPEAR), RecordRule(DAILY)):
+        gate = RecordGate(rule, clock=Clock(datetime(2026, 10, 24, 9, 0)))
+        assert not rule.repeats and not gate.allow(thing("person"), staying=True)
+        assert gate.allow(thing("person"))  # the arrival still counts
+    assert not RecordGate(RecordRule(INTERVAL)).allow(None, staying=True)  # a face not recognized: only visits
 
 
 def test_the_first_time_of_the_day_keeps_one_photo_a_day():

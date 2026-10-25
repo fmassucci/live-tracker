@@ -15,8 +15,9 @@ def _obs(at: float, person: str = "ana", score: float = 0.7, margin: float = 0.3
 
 
 def _feed(maker: DecisionMaker, start: int, stop: int, **kwargs) -> list:
-    """Observations every 0.1 s from start/10 to stop/10 seconds; returns the decisions made."""
-    return [d for t in range(start, stop) if (d := maker.observe(_obs(t / 10, **kwargs)))]
+    """Observations every 0.1 s from start/10 to stop/10 seconds; returns the decisions made, without the ones
+    that only say a recognized person is still there."""
+    return [d for t in range(start, stop) if (d := maker.observe(_obs(t / 10, **kwargs))) and not d.staying]
 
 
 def test_recognizes_after_enough_agreeing_frames():
@@ -45,6 +46,19 @@ def test_lingering_face_is_decided_once_until_it_leaves():
     for t in range(100, 115):  # then 1.5 s with nobody at the door
         maker.no_face(t / 10)
     assert len(_feed(maker, 115, 130)) == 1
+
+
+def test_a_recognized_person_who_stays_is_still_there_not_a_new_visit():
+    maker = _maker()
+    decisions = [maker.observe(_obs(t / 10)) for t in range(100)]  # ten seconds in front of the camera
+    assert decisions[:2] == [None, None]
+    assert (decisions[2].kind, decisions[2].person, decisions[2].staying) == ("recognized", "ana", False)
+    assert all(d.staying and (d.kind, d.person) == ("recognized", "ana") for d in decisions[3:])
+    spoofed = [maker.observe(_obs(t / 10, person="bia", live=False)) for t in range(100, 200)]
+    assert [d.kind for d in spoofed if d] == ["spoof"]  # a photo held up is decided once, never as still there
+    for t in range(200, 215):  # nobody at the door: the visit is over
+        maker.no_face(t / 10)
+    assert [d.staying for d in _feed(maker, 215, 230)] == [False]  # back: a new visit
 
 
 def test_frozen_stream_does_not_reopen_after_the_cooldown():

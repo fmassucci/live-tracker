@@ -1,9 +1,9 @@
 """The people-and-objects model: YOLOX-S, trained on COCO's 80 kinds of things.
 
 Each camera chooses the kinds it records. The model looks a few times per second; a kind is reported once it
-has stayed in the picture for the camera's minimum time, then again only after it has been gone for a moment,
-or, with the camera's interval, every interval while it stays: a person standing at the counter for an hour is
-one record, or one every 15 minutes, not thousands. The camera's rule (recording.py) decides what is kept.
+has stayed in the picture for the camera's minimum time, then as staying at each look until it has been gone for
+a moment. The camera's rule (recording.py) decides what is kept: a person standing at the counter for an hour is
+one record, or one every 15 minutes, not thousands.
 """
 
 from __future__ import annotations
@@ -205,25 +205,25 @@ class Sighting:
     count: int  # how many at that moment
     score: float  # the best one's
     box: np.ndarray  # the best one's, for the record's thumbnail
+    staying: bool = False  # already reported in this stay: only a rule that repeats while it stays keeps it
 
 
 @dataclass
 class _Stay:
     since: float
     last_seen: float
-    reported_at: float | None = None
+    reported: bool = False
 
 
 class Presence:
-    """When each kind arrives and leaves. A kind is reported once per stay, after min_seconds in the picture,
-    and with repeat_s, again every repeat_s while it stays. A stay ends after GONE_AFTER_S without it, so a few
-    missed looks don't start a new one."""
+    """When each kind arrives and leaves. A kind is reported once it has been in the picture for min_seconds,
+    then as staying at each look that finds it again. A stay ends after GONE_AFTER_S without it, so a few missed
+    looks don't start a new one."""
 
     GONE_AFTER_S = 3.0
 
-    def __init__(self, min_seconds: float, repeat_s: float = 0.0) -> None:
+    def __init__(self, min_seconds: float) -> None:
         self._min_seconds = min_seconds
-        self._repeat_s = repeat_s
         self._stays: dict[str, _Stay] = {}
 
     def update(self, found: list[Detection], now: float) -> list[Sighting]:
@@ -234,19 +234,14 @@ class Presence:
         for kind, detections in by_kind.items():
             stay = self._stays.setdefault(kind, _Stay(since=now, last_seen=now))
             stay.last_seen = now
-            if self._due(stay, now):
-                stay.reported_at = now
+            if stay.reported or now - stay.since >= self._min_seconds:
                 best = max(detections, key=lambda d: d.score)
-                sightings.append(Sighting(kind, len(detections), best.score, best.box))
+                sightings.append(Sighting(kind, len(detections), best.score, best.box, staying=stay.reported))
+                stay.reported = True
         for kind, stay in list(self._stays.items()):
             if kind not in by_kind and now - stay.last_seen > self.GONE_AFTER_S:
                 del self._stays[kind]
         return sightings
-
-    def _due(self, stay: _Stay, now: float) -> bool:
-        if stay.reported_at is None:
-            return now - stay.since >= self._min_seconds
-        return self._repeat_s > 0 and now - stay.reported_at >= self._repeat_s
 
 
 class ObjectAnalyzer:
@@ -254,13 +249,12 @@ class ObjectAnalyzer:
     and reports the kinds that stayed. Fire and smoke, and falls, run the same way with their own detector."""
 
     def __init__(self, detector: ObjectDetector, settings: ObjectSettings, name: Callable[[str], str],
-                 clock: Callable[[], float] = time.monotonic, repeat_s: float = 0.0,
-                 context: Iterable[str] = ()) -> None:
+                 clock: Callable[[], float] = time.monotonic, context: Iterable[str] = ()) -> None:
         self._detector = detector
         self._settings = settings
         self._kinds = set(settings.kinds)
         self._context = set(context)  # kinds only marked on the picture, never recorded: the people a fall needs
-        self._presence = Presence(settings.min_seconds, repeat_s)
+        self._presence = Presence(settings.min_seconds)
         self._name = name  # a kind's name in the service's language, for the marks on the picture
         self._clock = clock
         self._last_look = float("-inf")

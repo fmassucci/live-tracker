@@ -36,7 +36,8 @@
       return;
     }
     const wait = Math.max(0, Math.round(Number(field("min_seconds")?.value) || 0));
-    const mode = ["interval", "daily"].includes(field("record_mode")?.value) ? field("record_mode").value : "appear";
+    let mode = ["interval", "daily"].includes(field("record_mode")?.value) ? field("record_mode").value : "appear";
+    if (mode === "interval" && field("record_while_present")?.checked === false) mode = "interval-back";
     const every = interval();
     const text = templates[wait ? mode : `${mode}-now`]
       .replace("{seconds} ", `${wait}\u00a0`) // "2 s" stays on one line

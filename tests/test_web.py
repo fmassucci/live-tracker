@@ -594,9 +594,12 @@ def test_cameras_show_when_each_keeps_a_photo_and_live_opens_the_settings(client
     with app.state.services.db.session() as session:
         session.add_all([Camera(id=1, name="Caixa", url="0", analysis="objects", record_mode="interval",
                                 record_every_s=900),
-                         Camera(id=2, name="Porta", url="1", analysis="faces", record_mode="daily")])
+                         Camera(id=2, name="Porta", url="1", analysis="faces", record_mode="daily"),
+                         Camera(id=3, name="Fundos", url="2", analysis="objects", record_mode="interval",
+                                record_every_s=3600, record_while_present=False)])
     cameras = client.get("/cameras").text
-    assert "A cada 15\u00a0min" in cameras and "Primeira vez do dia" in cameras
+    assert "A cada 15\u00a0min</span>" in cameras and "Primeira vez do dia" in cameras
+    assert "A cada 1\u00a0h, ao voltar</span>" in cameras
     assert 'href="/cameras/1"' in client.get("/live/1").text and "Editar câmera" in client.get("/live/1").text
 
 
