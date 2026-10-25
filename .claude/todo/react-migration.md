@@ -7,7 +7,7 @@ csmart-digit-desktop. Only the web layer changes: the recognition service, datab
 
 ## What there is to move (2026-10-24)
 
-- 52 routes in src/portaria/web, 32 templates (about 1,650 lines), style.css (about 870 lines), about 470 lines
+- 52 routes in src/live_tracker/web, 32 templates (about 1,650 lines), style.css (about 870 lines), about 470 lines
   of JavaScript
 - 35 web tests (of 141) and 573 translated texts
 - About 12 screens:
