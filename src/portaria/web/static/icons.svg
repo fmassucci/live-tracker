@@ -75,6 +75,8 @@
 <symbol id="record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" />
   <circle cx="12" cy="12" r="4" fill="currentColor" /></symbol>
 <symbol id="stop" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2" /></symbol>
+<symbol id="power" viewBox="0 0 24 24"><path d="M12 2v10" />
+  <path d="M18.4 6.6a9 9 0 1 1-12.77.04" /></symbol>
 <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5" />
   <path d="M20 21a8 8 0 0 0-16 0" /></symbol>
 <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" />

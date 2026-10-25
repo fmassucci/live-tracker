@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from portaria.people import People
 from portaria.users import is_admin, user_exists
 from portaria.web.vision_client import VisionClient
 
-ASSET_VERSION = "34"  # bump to make browsers reload the stylesheet, scripts and icons
+ASSET_VERSION = "35"  # bump to make browsers reload the stylesheet, scripts and icons
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -72,6 +73,7 @@ class Services:
     people: People
     vision: VisionClient
     templates: Jinja2Templates
+    stop_web: Callable[[], None] = lambda: None  # stops this web UI; `portaria web` sets it (cli.py)
 
 
 class LoginRequired(Exception):

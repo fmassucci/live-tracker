@@ -790,6 +790,9 @@ a.entry-name:hover { color: var(--orange-ink); }
 .login-box > p { color: var(--ink-2); margin-bottom: 22px; }
 .login-box input[type="text"], .login-box input[type="password"] { height: 46px; }
 .login-box .button { width: 100%; min-height: 46px; margin-top: 6px; font-size: 15px; }
+/* Once the system is stopped, the marks stay still and gray: no camera is looking. */
+.stopped .login-frame { stroke: var(--ink-3); animation: none; }
+.stopped .login-box > p:last-child { margin-bottom: 0; }
 @media (max-width: 480px) {
   .login { gap: 24px; padding: 32px 16px; }
   .login-logo { width: 108px; height: 108px; }

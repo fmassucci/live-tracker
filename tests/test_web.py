@@ -11,7 +11,7 @@ from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from portaria.db import AuditEntry, Camera, Event, Person, User, get_setting
+from portaria.db import STOP_REQUESTS, AuditEntry, Camera, Event, Person, User, get_setting
 from portaria.events import face_path
 from portaria.users import authenticate, create_user, is_admin
 from portaria.web.app import create_app
@@ -209,6 +209,70 @@ def test_only_administrators_see_the_database_and_add_accounts(app, client, open
     client.post("/settings/users", data={"username": "gerente", "password": "senha-do-gerente", "administrator": "true"})
     with app.state.services.db.session() as session:
         assert is_admin(session, "gerente") and not is_admin(session, "caixa")
+
+
+class StoppingVision(NoVision):
+    """A recognition service that still answers a few times once it's asked to stop."""
+
+    def __init__(self, answers: int) -> None:
+        self.answers = answers
+
+    def status(self):
+        self.answers -= 1
+        return {"cameras": {}} if self.answers >= 0 else None
+
+
+@pytest.fixture
+def stops(app, monkeypatch):
+    """Each time Stop the system stopped the web UI."""
+    stopped = []
+    app.state.services.stop_web = lambda: stopped.append(True)
+    monkeypatch.setattr("portaria.web.settings.WEB_STOP_DELAY_S", 0)
+    return stopped
+
+
+def test_stop_the_system_stops_the_service_and_then_the_web_ui(app, stops):
+    with TestClient(app, client=("127.0.0.1", 50000)) as here:
+        here.post("/login", data={"username": "admin", "password": "admin"})
+        assert 'action="/settings/stop"' in here.get("/settings").text
+        app.state.services.vision = StoppingVision(answers=3)
+        response = here.post("/settings/stop", data={"confirm": "true"})
+    assert response.status_code == 200 and "O sistema está desligado" in response.text
+    assert app.state.services.vision.answers == -1  # the page came once the service no longer answered
+    assert stops == [True]
+    with app.state.services.db.session() as session:
+        assert get_setting(session, STOP_REQUESTS) == "1"
+        assert session.scalars(select(AuditEntry.action).order_by(AuditEntry.id.desc())).first() == "system stopped"
+
+
+def test_stopping_says_when_the_service_takes_a_while(app, stops, monkeypatch):
+    monkeypatch.setattr("portaria.web.settings.SERVICE_STOP_WAIT_S", 0)
+    with TestClient(app, client=("127.0.0.1", 50000)) as here:
+        here.post("/login", data={"username": "admin", "password": "admin"})
+        app.state.services.vision = StoppingVision(answers=100)
+        text = here.post("/settings/stop", data={"confirm": "true"}).text
+    assert "O sistema está sendo desligado" in text and "termina sozinho em até um minuto" in text
+    assert stops == [True]  # the web UI stops all the same
+
+
+def test_only_an_administrator_on_this_computer_stops_the_system(app, client, stops):
+    text = client.get("/settings").text  # an administrator, on a phone
+    assert 'action="/settings/stop"' not in text
+    assert "Para desligar o sistema, acesse as Configurações no computador onde ele está instalado." in text
+    assert client.post("/settings/stop", data={"confirm": "true"}).status_code == 403
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with TestClient(app, client=("127.0.0.1", 50000)) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        assert 'id="stop"' not in cashier.get("/settings").text
+        assert cashier.post("/settings/stop", data={"confirm": "true"}).status_code == 403
+    with TestClient(app, client=("127.0.0.1", 50000)) as here:
+        here.post("/login", data={"username": "admin", "password": "admin"})
+        response = here.post("/settings/stop", follow_redirects=False)  # the box not ticked
+        assert response.headers["location"] == "/settings#stop"
+    assert stops == []
+    with app.state.services.db.session() as session:
+        assert get_setting(session, STOP_REQUESTS) is None
 
 
 def test_an_administrator_edits_and_removes_the_other_accounts(app, client):

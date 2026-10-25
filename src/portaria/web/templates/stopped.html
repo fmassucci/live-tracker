@@ -1,0 +1,29 @@
+{% from "_macros.html" import login_brand %}
+{# Shown once Stop the system, in Settings, stopped the recognition service. This web UI stops a moment later, so the
+   page asks it for nothing more. #}
+{% set heading = t("The system is stopped") if service_stopped else t("The system is being stopped") %}
+<!doctype html>
+<html lang="{{ 'pt-BR' if lang == 'pt' else 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ heading }} | {{ brand.name }}</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+</head>
+<body>
+<main class="login stopped">
+  {{ login_brand(brand) }}
+
+  <div class="login-box" role="status">
+    <h1>{{ heading }}</h1>
+    {% if service_stopped %}
+    <p>{{ t("No camera is recording, and the system no longer opens on any device.") }}</p>
+    {% else %}
+    <p>{{ t("The recognition service is taking longer to stop. It finishes by itself within a minute.") }}</p>
+    {% endif %}
+    <p>{{ t("To start it again, double-click Portaria on this computer's desktop.") }}</p>
+  </div>
+</main>
+</body>
+</html>

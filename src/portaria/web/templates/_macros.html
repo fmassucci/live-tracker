@@ -2,6 +2,20 @@
 <svg class="icon {{ extra }}" aria-hidden="true"><use href="/static/icons.svg?v={{ asset_version }}#{{ name }}"></use></svg>
 {%- endmacro %}
 
+{# The bakery's logo inside the marks the live video draws around a face it recognizes: the sign-in page and the
+   page shown once the system is stopped. #}
+{% macro login_brand(brand) -%}
+<div class="login-brand">
+  <span class="login-logo">
+    {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
+    <svg class="login-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M2 24V2h22M76 2h22v22M98 76v22H76M24 98H2V76"/>
+    </svg>
+  </span>
+  <p class="login-name">{{ brand.name }}</p>
+</div>
+{%- endmacro %}
+
 {% macro avatar(photo_id, name, extra="") -%}
 {% if photo_id %}<img class="avatar {{ extra }}" src="/photos/{{ photo_id }}/face.jpg?w=144" alt="" loading="lazy">
 {%- else %}<span class="avatar avatar-empty {{ extra }}" aria-hidden="true">{{ name[:1] }}</span>{% endif %}

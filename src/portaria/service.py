@@ -3,7 +3,7 @@ recognition with its liveness check, people and objects, fire and smoke, or fall
 
 Run it with `python -m portaria run`. It keeps working on its own: the web UI can be stopped or
 restarted without affecting the door. They share the database, and the web UI reads frames and
-status from this service's local port (preview.py).
+status from this service's local port (preview.py). Stop the system, in Settings, stops both.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from portaria.camera import Camera, Frame, part_of
 from portaria.config import Config
-from portaria.db import CAMERAS_VERSION, FACES_VERSION, MODELS_VERSION, Database, get_setting
+from portaria.db import CAMERAS_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting
 from portaria.db import Camera as CameraRow
 from portaria.door import make_door
 from portaria.drawing import Overlay, render
@@ -289,10 +289,16 @@ class VisionService:
         log.info("detected %s (%d, score %.2f) at %s", sighting.kind, sighting.count, sighting.score, spec.name)
 
     def _sync(self) -> None:
-        """Reloads faces and cameras when the web UI has changed them, and a camera's model once it's downloaded."""
+        """Reloads faces and cameras when the web UI has changed them, and a camera's model once it's downloaded.
+        Stops when Settings stops the system."""
         with self.db.session() as session:
-            keys = (FACES_VERSION, CAMERAS_VERSION, MODELS_VERSION)
+            keys = (FACES_VERSION, CAMERAS_VERSION, MODELS_VERSION, STOP_REQUESTS)
             versions = {key: get_setting(session, key, "0") for key in keys}
+            # Only a stop asked after this service started: an earlier one was for the service that ran then.
+            if self._versions and versions[STOP_REQUESTS] != self._versions[STOP_REQUESTS]:
+                log.info("stopping: Settings stopped the system")
+                self.stop()
+                return
             if versions[FACES_VERSION] != self._versions.get(FACES_VERSION):
                 self.gallery = load_gallery(session, self.cfg.recognition.model)
                 self._door_allowed = door_allowed(session)

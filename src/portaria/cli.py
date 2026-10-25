@@ -159,8 +159,20 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
         print(f"from other devices on the network: {' or '.join(others)}")
     if args.open:
         threading.Thread(target=_open_once_answering, args=(here,), name="browser", daemon=True).start()
-    uvicorn.run(create_app(cfg), host=cfg.web.host, port=cfg.web.port, log_level="warning")
-    return 0
+    app = create_app(cfg)
+    # Live pictures stay open on phones and tablets: stopping waits for them a few seconds at most.
+    server = uvicorn.Server(uvicorn.Config(app, host=cfg.web.host, port=cfg.web.port, log_level="warning",
+                                           timeout_graceful_shutdown=5))
+
+    def stop() -> None:  # Stop the system, in Settings
+        server.should_exit = True
+
+    app.state.services.stop_web = stop
+    try:
+        server.run()
+    except KeyboardInterrupt:  # Ctrl+C: uvicorn stops, then raises it again
+        pass
+    return 0 if server.started else 1
 
 
 def _answers(url: str) -> bool:

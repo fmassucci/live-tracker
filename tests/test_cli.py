@@ -1,6 +1,8 @@
 import socket
 import time
 import webbrowser
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 import uvicorn
@@ -22,26 +24,51 @@ def _config_file(tmp_path, cfg, web_port: int) -> str:
     return str(path)
 
 
+def fake_server(serve: Callable[[Any], None]) -> type:
+    """uvicorn's server, running serve(server) instead of the web UI."""
+
+    class Server:
+        def __init__(self, config: uvicorn.Config) -> None:
+            self.config, self.should_exit, self.started = config, False, True
+
+        def run(self) -> None:
+            serve(self)
+
+    return Server
+
+
 def test_the_web_ui_opens_in_the_browser_once_it_answers(tmp_path, cfg, monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr(webbrowser, "open", opened.append)
 
-    def serve(app, host: str, port: int, log_level: str) -> None:
-        with socket.create_server((host, port)):
+    def serve(server) -> None:
+        with socket.create_server((server.config.host, server.config.port)):
             deadline = time.monotonic() + 10
             while not opened and time.monotonic() < deadline:
                 time.sleep(0.05)
 
-    monkeypatch.setattr(uvicorn, "run", serve)
+    monkeypatch.setattr(uvicorn, "Server", fake_server(serve))
     port = free_port()
     assert main(["--config", _config_file(tmp_path, cfg, port), "web", "--open"]) == 0
     assert opened == [f"http://127.0.0.1:{port}"]
 
 
+def test_stop_the_system_stops_the_web_ui(tmp_path, cfg, monkeypatch):
+    stopped: list[bool] = []
+
+    def serve(server) -> None:
+        server.config.app.state.services.stop_web()  # what Stop the system, in Settings, does last
+        stopped.append(server.should_exit)
+
+    monkeypatch.setattr(uvicorn, "Server", fake_server(serve))
+    assert main(["--config", _config_file(tmp_path, cfg, free_port()), "web"]) == 0
+    assert stopped == [True]
+
+
 def test_a_web_ui_already_running_is_only_opened(tmp_path, cfg, monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr(webbrowser, "open", opened.append)
-    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: pytest.fail("started a second web UI"))
+    monkeypatch.setattr(uvicorn, "Server", lambda *args, **kwargs: pytest.fail("started a second web UI"))
     with socket.create_server(("127.0.0.1", 0)) as running:
         port = running.getsockname()[1]
         assert main(["--config", _config_file(tmp_path, cfg, port), "web", "--open"]) == 0

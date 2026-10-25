@@ -89,6 +89,9 @@ minimized window and the web UI in the window that opens. Once the web UI answer
 it. Whatever already runs is left as it is, so double-clicking again only opens the browser. Closing the web
 UI's window stops only the web UI: the service keeps recording until its own window is closed too.
 
+To stop both, use **Stop the system** in Settings (System). Only administrators see it, and only in a browser
+on the computer that runs the system, since that's the only place to start it again.
+
 By hand, in two terminals:
 
 ```

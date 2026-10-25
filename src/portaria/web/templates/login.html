@@ -1,4 +1,4 @@
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import login_brand %}
 <!doctype html>
 <html lang="{{ 'pt-BR' if lang == 'pt' else 'en' }}">
 <head>
@@ -10,16 +10,7 @@
 </head>
 <body>
 <main class="login">
-  {# The bakery's logo inside the marks the live video draws around a face it recognizes. #}
-  <div class="login-brand">
-    <span class="login-logo">
-      {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
-      <svg class="login-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M2 24V2h22M76 2h22v22M98 76v22H76M24 98H2V76"/>
-      </svg>
-    </span>
-    <p class="login-name">{{ brand.name }}</p>
-  </div>
+  {{ login_brand(brand) }}
 
   <div class="login-box">
     <h1>{{ t("Sign in") }}</h1>

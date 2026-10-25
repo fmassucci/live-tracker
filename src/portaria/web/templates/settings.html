@@ -185,6 +185,20 @@
         <dt>{{ t("Default language") }}</dt>
         <dd>{{ "Português" if cfg.web.language == "pt" else "English" }}</dd>
       </dl>
+      {% if is_admin %}
+      <div class="subpanel" id="stop" style="margin-top: 18px">
+        <h3>{{ t("Stop the system") }}</h3>
+        {% if on_this_computer %}
+        <form method="post" action="/settings/stop">
+          <p class="hint" style="margin-bottom: 14px">{{ t("Stops recording on every camera and closes the system on every device. To start it again, double-click Portaria on the desktop.") }}</p>
+          <label class="check"><input type="checkbox" name="confirm" value="true" required><span>{{ t("I understand nothing is recorded until it starts again") }}</span></label>
+          <button class="button button-quiet" data-busy-text="{{ t('Stopping...') }}">{{ icon("power") }}{{ t("Stop the system") }}</button>
+        </form>
+        {% else %}
+        <p class="hint">{{ t("To stop the system, open Settings on the computer where it is installed.") }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </section>
 

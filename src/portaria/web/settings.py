@@ -1,4 +1,5 @@
-"""Settings: the name and logo shown in the app, accounts, the app's addresses and the door screen's.
+"""Settings: the name and logo shown in the app, accounts, the app's addresses and the door screen's, and
+stopping the system.
 
 The Database panel's actions are in data.py.
 """
@@ -7,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 import time
+from collections.abc import Callable
 
 import cv2
 import numpy as np
@@ -14,18 +16,22 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
-from portaria.db import Camera, User, audit, get_setting, set_setting
+from portaria.db import STOP_REQUESTS, Camera, User, audit, bump, get_setting, set_setting
 from portaria.users import AccountError, create_user, is_admin, remove_user, set_admin, set_password
 from portaria.web.common import (
     flash, on_this_computer, page, require_admin, require_user, services, web_addresses,
 )
 from portaria.web.data import summary
+from portaria.web.vision_client import VisionClient
 
 router = APIRouter()
 admin = APIRouter(dependencies=[Depends(require_user)])
 
 LOGO_MAX_SIDE = 512
+SERVICE_STOP_WAIT_S = 20.0  # how long Stop the system waits for the recognition service
+WEB_STOP_DELAY_S = 2.0  # then how long this web UI still answers, for the page saying it stopped
 
 
 @admin.get("/settings", response_class=HTMLResponse)
@@ -96,6 +102,43 @@ def new_door_key(request: Request) -> RedirectResponse:
         audit(session, request.session["user"], "door screen address changed")
     flash(request, "New door screen address created. Open it again on the tablet; the old one no longer works.")
     return RedirectResponse("/settings#door-screen", status_code=303)
+
+
+@admin.post("/settings/stop", response_model=None)
+def stop_system(
+    request: Request, confirm: bool = Form(False), user: str = Depends(require_admin)
+) -> HTMLResponse | RedirectResponse:
+    """Stops the recognition service, then this web UI, as closing both their windows would. Only from a browser
+    on this computer: the system can only be started again here."""
+    if not on_this_computer(request):
+        raise HTTPException(403)
+    if not confirm:
+        flash(request, "Confirm that nothing is recorded until the system starts again.", "bad")
+        return RedirectResponse("/settings#stop", status_code=303)
+    s = services(request)
+    running = s.vision.status() is not None
+    with s.db.session() as session:
+        bump(session, STOP_REQUESTS)
+        audit(session, user, "system stopped")
+    response = page(request, "stopped.html", service_stopped=not running or _service_stopped(s.vision))
+    response.background = BackgroundTask(_stop_web_soon, s.stop_web)
+    return response
+
+
+def _service_stopped(vision: VisionClient) -> bool:
+    """Whether the recognition service stops within SERVICE_STOP_WAIT_S. It stops its cameras first, and its
+    port, which the status comes from, last."""
+    deadline = time.monotonic() + SERVICE_STOP_WAIT_S
+    while vision.status() is not None:
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.25)
+    return True
+
+
+def _stop_web_soon(stop_web: Callable[[], None]) -> None:
+    time.sleep(WEB_STOP_DELAY_S)  # meanwhile the browser loads the stopped page's styles and logo
+    stop_web()
 
 
 @admin.post("/settings/users")

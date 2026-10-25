@@ -33,6 +33,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 FACES_VERSION = "faces_version"
 CAMERAS_VERSION = "cameras_version"
 MODELS_VERSION = "models_version"  # a model was downloaded or removed
+STOP_REQUESTS = "stop_requests"  # bumped when Settings stops the system: the recognition service stops
 
 
 class Base(DeclarativeBase):

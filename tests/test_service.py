@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from portaria import service
 from portaria.camera import Frame
-from portaria.db import MODELS_VERSION, Event, bump
+from portaria.db import MODELS_VERSION, STOP_REQUESTS, Event, bump
 from portaria.db import Camera as CameraRow
 from portaria.decision import Decision
 from portaria.pipeline import Result
@@ -130,6 +130,18 @@ def test_a_camera_waiting_for_its_model_gets_it_once_downloaded(cfg, monkeypatch
         assert not vision._workers[1].model_missing and len(attempts) == 2
     finally:
         vision._apply([])
+
+
+def test_the_service_stops_when_settings_stops_the_system(cfg, monkeypatch):
+    vision = _vision(cfg, monkeypatch)
+    with vision.db.session() as session:
+        bump(session, STOP_REQUESTS)  # asked of the service that ran before this one
+    vision._sync()
+    assert not vision._stop.is_set()
+    with vision.db.session() as session:
+        bump(session, STOP_REQUESTS)
+    vision._sync()
+    assert vision._stop.is_set()
 
 
 def test_a_thing_that_stayed_is_recorded_with_its_picture(cfg, monkeypatch):
