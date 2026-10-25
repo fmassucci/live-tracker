@@ -1,43 +1,45 @@
 {% extends "base.html" %}
-{% from "_macros.html" import switch_button %}
 {% block title %}{{ t("Today") }}{% endblock %}
+{# Wide, with the pictures a little smaller than on Live. #}
+{% block page_class %}page-wide{% endblock %}
 {% block content %}
-<div class="today-head">
-  <div>
-    <h1>{{ t.long_date(now.date()) }}</h1>
-    <p class="muted">{{ t("Who came in today, as the door camera saw it.") }}</p>
-  </div>
-  <p class="clock" id="clock">{{ now.strftime("%H:%M") }}</p>
-</div>
-
-<div hx-get="/today/live" hx-trigger="every 5s" hx-swap="none"></div>
-
-<div class="today">
-  <div>
-    <div class="video" style="--ratio: {{ camera_status.size | aspect }}" {% if door_state in ("recording", "no-image") %}data-state-url="/cameras/{{ door_camera.id }}/state"{% endif %}>
-      {% if not door_camera %}
-      <div class="video-empty">
-        <p>{{ t("No door camera yet.") }}</p>
-        <a href="/cameras/new">{{ t("Add a camera") }}</a>
-      </div>
-      {% elif door_state == "stopped" %}
-      <div class="video-empty">
-        <p>{{ t("Recording is stopped: nobody is recognized at this door.") }}</p>
-        {{ switch_button(door_camera, "/", t) }}
-      </div>
-      {% elif door_state == "service-down" %}
-      <div class="video-empty" data-waiting-for="{{ door_camera.id }}">
-        <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
-        <p class="small">{{ t("Start it on the server with: python -m portaria run") }}</p>
-      </div>
-      {% else %}
-      <img src="/cameras/{{ door_camera.id }}/stream" data-stream-for="{{ door_camera.id }}" alt="{{ t('Live image from {name}', name=door_camera.name) }}">
-      {% endif %}
-      {% include "_door_caption.html" %}
-      <p class="video-label" data-video-label aria-live="polite"></p>
+{% set index = cameras | length > 1 %}
+<div class="today-layout{% if index %} has-index{% endif %}">
+  <div class="today-head">
+    <div>
+      <h1>{{ t.long_date(now.date()) }}</h1>
+      <p class="muted">{{ t("Who was here today, and what the cameras found.") }}</p>
     </div>
-    {% include "_not_recognized.html" %}
+    <p class="clock" id="clock">{{ now.strftime("%H:%M") }}</p>
   </div>
-  {% include "_entries.html" %}
+
+  {% if index %}
+  {# Beside the menu: a list of the cameras that jumps to each, and follows the one in view. #}
+  <nav class="camera-index" aria-label="{{ t('Cameras on this page') }}" data-camera-index>
+    <p class="camera-index-title">{{ t("Cameras") }}</p>
+    <ul>
+      {% for c in cameras %}
+      <li><a href="#camera-{{ c.id }}" data-for="camera-{{ c.id }}"><span class="camera-index-name">{{ c.name }}</span>{% include "_today_index_count.html" %}</a></li>
+      {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  <div class="today-rows">
+    <div hidden hx-get="/today/live" hx-trigger="every 5s" hx-swap="none"></div>
+    {% if cameras %}
+    {% for c in cameras %}{% include "_today_camera.html" %}{% endfor %}
+    {% elif camera_names %}
+    <div class="empty">
+      <p>{{ t("Every camera is turned off. Turn one on to follow the day here.") }}</p>
+      <a class="button button-quiet" href="/cameras">{{ t("Go to Cameras") }}</a>
+    </div>
+    {% else %}
+    <div class="empty">
+      <p>{{ t("No cameras yet.") }}</p>
+      <a class="button" href="/cameras/new">{{ t("Add a camera") }}</a>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

@@ -372,39 +372,124 @@ def _event(kind: str, name: str | None, at: datetime | None = None) -> Event:
                  liveness="none")
 
 
+def _at_camera(event: Event, camera_id: int) -> Event:
+    event.camera_id = camera_id
+    return event
+
+
 def test_today_lists_who_came_in_and_shows_faces_not_recognized_only_when_there_are_some(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(id=1, name="Porta", url="0", analysis="faces", device="door"))
     assert "Não reconhecidos hoje" not in client.get("/").text
     with app.state.services.db.session() as session:
-        session.add_all([_event("recognized", "Ana Souza"), _event("unknown", None)])
+        session.add_all([_at_camera(_event("recognized", "Ana Souza"), 1), _at_camera(_event("unknown", None), 1)])
     today = client.get("/").text
     assert "Ana Souza" in today and "Não reconhecidos hoje" in today
     assert "Ainda não chegaram" not in today
 
 
-def test_each_entry_shows_the_arrival_and_the_last_return(client, app):
+def test_each_person_shows_when_they_arrived_and_were_last_seen(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(id=1, name="Porta", url="0", analysis="faces", device="door"))
+
     def recognized_at(hour: int, minute: int) -> None:
         with app.state.services.db.session() as session:
-            session.add(_event("recognized", "Ana Souza", datetime.combine(date.today(), time(hour, minute))))
+            at = datetime.combine(date.today(), time(hour, minute))
+            session.add(_at_camera(_event("recognized", "Ana Souza", at), 1))
 
     recognized_at(7, 58)
     today = client.get("/").text
-    assert "Chegada" in today and ">07:58</time>" in today
-    assert "Retorno" not in today  # the column appears once somebody went out and came back
+    assert "Chegou" in today and ">07:58</time>" in today
+    assert "Última vez" not in today  # the column appears once somebody was seen again
     recognized_at(12, 10)
-    today = client.get("/").text
-    assert "Retorno" in today and ">12:10</time>" in today and "vezes" not in today
     recognized_at(13, 5)
     today = client.get("/").text
-    assert ">07:58</time>" in today and ">13:05</time>" in today and "2 vezes" in today
+    assert "Última vez" in today and ">07:58</time>" in today and ">13:05</time>" in today
+    assert ">12:10</time>" not in today
 
 
-def test_a_camera_without_a_door_records_but_its_sightings_are_not_entries(client, app):
+def test_each_face_camera_lists_the_people_it_recognized(client, app):
     with app.state.services.db.session() as session:
-        seen = _event("recognized", "Ana Souza")
-        seen.door = ""  # no door attached to the camera that saw her
+        session.add_all([Camera(id=1, name="Entrada", url="0", analysis="faces", device="door"),
+                         Camera(id=2, name="Cozinha", url="1", analysis="faces")])
+        session.flush()
+        for at, camera_id in ((time(7, 58), 1), (time(13, 40), 2)):  # the kitchen has no door
+            session.add(_at_camera(_event("recognized", "Ana Souza", datetime.combine(date.today(), at)), camera_id))
+    today = client.get("/").text
+    door, kitchen = today.split('id="camera-2"')  # the door camera's row comes first, as on Cameras
+    assert ">07:58</time>" in door and ">13:40</time>" not in door
+    assert ">13:40</time>" in kitchen and ">07:58</time>" not in kitchen
+    assert 'href="#camera-1"' in door and 'href="#camera-2"' in door  # the list of cameras beside the menu
+    with app.state.services.db.session() as session:
+        session.get(Camera, 2).enabled, session.get(Camera, 2).analysis = False, ""
+    assert 'href="#camera-1"' not in client.get("/").text  # one camera: no list
+
+
+def test_a_camera_shows_what_it_recorded_today_also_with_an_earlier_model(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(id=1, name="Salão", url="0", analysis="falls"))  # it recognized faces this morning
+        session.flush()
+        session.add(_at_camera(_event("recognized", "Ana Souza"), 1))
+        session.add(Event(at=datetime.now(), kind="detected", label="fall", count=1, score=0.8, camera_id=1, door="",
+                          model="yolov8s-pose", liveness="none"))
+    today = client.get("/").text
+    assert "Ana Souza" in today and "Pessoas hoje" in today
+    assert "Encontrado hoje" in today and "Queda<span>1</span>" in today
+    assert "Só a imagem ao vivo" not in today
+
+
+class OnlineVision(NoVision):
+    """The recognition service receives every camera's picture."""
+
+    def status(self):
+        return {"cameras": {str(i): {"online": True, "size": "1280x720", "fps": 15.0, "state": "idle"}
+                            for i in range(1, 10)}}
+
+
+def test_today_shows_every_camera_with_a_model_or_turned_on(client, app):
+    with app.state.services.db.session() as session:
+        session.add_all([
+            Camera(id=1, name="Caixa", url="0", analysis="objects"),
+            Camera(id=2, name="Fundos", url="1", analysis=""),  # only the picture
+            Camera(id=3, name="Garagem", url="2", analysis="", enabled=False),  # off, without a model: not shown
+            Camera(id=4, name="Porta", url="3", analysis="faces", device="door", enabled=False),  # stopped
+        ])
+        session.flush()
+        for label, count in (("person", 1), ("person", 2), ("dining_table", 1)):
+            session.add(Event(at=datetime.now(), kind="detected", label=label, count=count, score=0.8, camera_id=1,
+                              door="", model="yolox", liveness="none"))
+    app.state.services.vision = OnlineVision()
+    today = client.get("/").text
+    assert "Caixa" in today and "Fundos" in today and "Porta" in today and "Garagem" not in today
+    assert re.search(r"Pessoa<span>2</span>.*Mesa<span>1</span>", today, re.S)  # what it found, the most first
+    assert "Encontrado hoje" in today and "Só a imagem ao vivo" in today and "Iniciar gravação" in today
+    assert today.count('data-stream-for="') == 2  # a few cameras play as video
+    with app.state.services.db.session() as session:
+        session.add_all([Camera(id=i, name=f"Extra {i}", url=str(i), analysis="") for i in (5, 6, 7)])
+    today = client.get("/").text
+    assert 'data-stream-for="' not in today and today.count('data-every="1000"') == 5  # more: a picture a second
+
+
+def test_people_show_when_any_face_camera_last_saw_them(client, app):
+    db = app.state.services.db
+    with db.session() as session:
+        ana = Person(name="Ana Souza")
+        session.add(ana)
+        session.flush()
+        seen = _event("recognized", "Ana Souza", datetime(2026, 10, 20, 9, 30))
+        seen.person_id, seen.door = ana.id, ""  # a camera without a door
         session.add(seen)
-    assert "Ana Souza" not in client.get("/").text  # Today lists entries at a door
-    assert "Ana Souza" in client.get("/records").text
+    assert "Visto por último: 20/10 09:30" in client.get("/people").text
+
+
+def test_cameras_show_when_each_keeps_a_photo_and_live_opens_the_settings(client, app):
+    with app.state.services.db.session() as session:
+        session.add_all([Camera(id=1, name="Caixa", url="0", analysis="objects", record_mode="interval",
+                                record_every_s=900),
+                         Camera(id=2, name="Porta", url="1", analysis="faces", record_mode="daily")])
+    cameras = client.get("/cameras").text
+    assert "A cada 15\u00a0min" in cameras and "Primeira vez do dia" in cameras
+    assert 'href="/cameras/1"' in client.get("/live/1").text and "Editar câmera" in client.get("/live/1").text
 
 
 def test_live_frame_state_is_quiet_without_the_recognition_service(client):

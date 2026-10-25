@@ -1,0 +1,38 @@
+{# One camera on Today: its picture, live and big, beside what it recorded today, in a card as tall as the picture
+   where the rest scrolls. The picture is already live, so it has no "watch live" link; a click on it opens Live,
+   bigger and with the camera's details. A face camera's picture lights up green or red when it decides, like a
+   door. #}
+{% from "_macros.html" import camera_chip, switch_button %}
+{% set state = states[c.id] %}
+{% set sending = state in ("recording", "live", "no-model") %}
+<section class="cam-row" id="camera-{{ c.id }}" aria-labelledby="camera-{{ c.id }}-name">
+  <div class="cam-row-head">
+    <h2 id="camera-{{ c.id }}-name">{{ c.name }}</h2>
+    <span class="cam-model">{{ t(analyses.get(c.analysis, c.analysis)) }}</span>
+  </div>
+  <div class="cam-row-body">
+    <div class="video cam-picture" {% if c.analysis == "faces" and state in ("recording", "no-image") %}data-state-url="/cameras/{{ c.id }}/state"{% endif %}>
+      {% if sending %}
+      {% if live_video %}
+      <img src="/cameras/{{ c.id }}/stream" data-stream-for="{{ c.id }}" alt="{{ t('Live image from {name}', name=c.name) }}">
+      {% else %}
+      <img src="/cameras/{{ c.id }}/frame.jpg" data-refresh="/cameras/{{ c.id }}/frame.jpg" data-every="1000" alt="{{ t('Live image from {name}', name=c.name) }}">
+      {% endif %}
+      {% set open_live = t("Open {name} in Live", name=c.name) %}
+      <a class="video-link" href="/live/{{ c.id }}" aria-label="{{ open_live }}" title="{{ open_live }}"></a>
+      {% elif state == "stopped" %}
+      <div class="video-empty" data-waiting-for="{{ c.id }}">
+        <p>{{ t("Recording is stopped.") }}</p>
+        {{ switch_button(c, "/", t, "button-small") }}
+      </div>
+      {% elif state == "no-image" %}
+      <div class="video-empty" data-waiting-for="{{ c.id }}"><p>{{ t("No image from this camera.") }}</p></div>
+      {% else %}
+      <div class="video-empty" data-waiting-for="{{ c.id }}"><p>{{ t("The recognition service is not running, so there is no image.") }}</p></div>
+      {% endif %}
+      <div class="video-chips">{{ camera_chip(state, t(recording_states[state]), "glass", c.id) }}</div>
+      {% if c.analysis == "faces" %}<p class="video-label" data-video-label aria-live="polite"></p>{% endif %}
+    </div>
+    <div class="cam-panel-frame">{% include "_today_panel.html" %}</div>
+  </div>
+</section>

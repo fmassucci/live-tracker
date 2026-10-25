@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import groupby
 from pathlib import Path
@@ -15,7 +16,9 @@ from portaria.db import Camera, Event, Person, Photo
 from portaria.events import face_path
 from portaria.falls import NAMES as FALL_NAMES
 from portaria.fire import NAMES as FIRE_NAMES
+from portaria.models import CATALOG
 from portaria.objects import NAMES as OBJECT_NAMES
+from portaria.web.cameras import ANALYSIS_NAMES
 from portaria.web.common import (
     DOOR_RESULTS, KINDS, fragment, image_response, page, recording_state, require_user, services,
 )
@@ -23,8 +26,12 @@ from portaria.web.common import (
 router = APIRouter(dependencies=[Depends(require_user)])
 
 NAMES = {**OBJECT_NAMES, **FIRE_NAMES, **FALL_NAMES}  # every kind of thing a camera records, by its key
+THING_MODELS = tuple(m.key for m in CATALOG if m.on_cameras and m.key != "faces")  # models that record things
 REFRESH_S = 5  # Today refreshes this often; an entry this recent gets the stamping animation
-UNRECOGNIZED_SHOWN = 30  # faces not recognized shown on Today, newest first; Records has all of them
+UNRECOGNIZED_SHOWN = 20  # a face camera's newest faces not recognized, in its panel on Today; Records has all
+FINDINGS_SHOWN = 6  # a people-and-objects camera's newest photos, in its panel on Today; Records has all
+LIVE_VIDEOS = 4  # Today plays up to this many cameras as video; with more, each shows a picture a second, since a
+#                  browser keeps only 6 connections open to one address and every video holds one
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -145,45 +152,96 @@ def _today(request: Request) -> dict:
     s = services(request)
     now = datetime.now()
     start = datetime.combine(now.date(), datetime.min.time())
+    today = Event.at >= start
     with s.db.session() as session:
-        entries = session.execute(
+        cameras = session.scalars(select(Camera).order_by(Camera.device.desc(), Camera.name)).all()  # as on Cameras
+        shown = [c for c in cameras if c.analysis or c.enabled]  # a stopped camera with a model shows it's stopped
+        recognized = session.execute(
             select(
                 Event.person_id,
                 func.coalesce(Person.name, Event.person_name).label("name"),
                 func.coalesce(Person.job_title, "").label("job"),
                 func.coalesce(Person.category, "").label("category"),
-                func.min(Event.at).label("first"),
-                func.max(Event.at).label("last"),
-                func.count().label("visits"),
+                Event.at,
+                Event.camera_id,
             )
             .outerjoin(Person, Person.id == Event.person_id)
-            .where(Event.at >= start, Event.kind == "recognized", Event.door != "")  # entries: at a door camera
-            .group_by(Event.person_id, "name", "job", "category")
-            .order_by(func.min(Event.at))
+            .where(today, Event.kind == "recognized")
+            .order_by(Event.at)
         ).all()
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
-        unrecognized_today = select(Event).where(Event.at >= start, Event.kind != "recognized", Event.door != "")
-        not_recognized = session.scalars(unrecognized_today.order_by(Event.at.desc()).limit(UNRECOGNIZED_SHOWN)).all()
-        not_recognized_count = session.scalar(select(func.count()).select_from(unrecognized_today.subquery()))
-        door_cameras = session.scalars(  # a stopped one too: Today shows that it isn't recording
-            select(Camera).where(Camera.device == "door").order_by(Camera.enabled.desc(), Camera.id)
-        ).all()
+        not_recognized = Event.kind.in_(("unknown", "spoof"))
+        unknown_counts = dict(session.execute(
+            select(Event.camera_id, func.count()).where(today, not_recognized).group_by(Event.camera_id)
+        ).all())
+        kinds = _found_by_camera(session.execute(
+            select(Event.camera_id, Event.label, func.count().label("count"))
+            .where(today, Event.kind == "detected")
+            .group_by(Event.camera_id, Event.label)
+        ).all())
+        unknown, photos = {}, {}  # each camera's newest, for its panel
+        for c in shown:
+            newest = select(Event).where(today, Event.camera_id == c.id).order_by(Event.at.desc())
+            if c.id in unknown_counts:
+                unknown[c.id] = session.scalars(newest.where(not_recognized).limit(UNRECOGNIZED_SHOWN)).all()
+            if c.id in kinds:
+                photos[c.id] = session.scalars(newest.where(Event.kind == "detected").limit(FINDINGS_SHOWN)).all()
     status = s.vision.status()
-    door_camera = door_cameras[0] if door_cameras else None
-    camera_status = status.get("cameras", {}).get(str(door_camera.id)) if status and door_camera else None
+    statuses = status.get("cameras", {}) if status else {}
     return {
         "now": now,
-        "entries": entries,
+        "cameras": shown,
+        "states": {c.id: recording_state(c, statuses.get(str(c.id)), status is not None) for c in shown},
+        "statuses": statuses,
+        "live_video": len(shown) <= LIVE_VIDEOS,
+        "camera_names": {c.id: c.name for c in cameras},
+        "people": _people_by_camera(recognized),
         "avatars": avatars,
-        "not_recognized": not_recognized,
-        "not_recognized_count": not_recognized_count,
-        "door_cameras": door_cameras,
-        "door_camera": door_camera,
-        "camera_status": camera_status,
-        "door_state": recording_state(door_camera, camera_status, status is not None) if door_camera else None,
+        "unknown": unknown,
+        "unknown_counts": unknown_counts,
+        "found": kinds,
+        "found_totals": {camera_id: sum(count for _, count in counted) for camera_id, counted in kinds.items()},
+        "photos": photos,
+        "thing_models": THING_MODELS,
+        "analyses": ANALYSIS_NAMES,  # each camera's AI model, by name beside the camera's
+        "things": NAMES,
         "service_up": status is not None,
         "just_now": now - timedelta(seconds=REFRESH_S + 1),
     }
+
+
+@dataclass
+class Seen:
+    """One person in a face camera's panel on Today: when it first and last recognized them."""
+
+    person_id: int | None
+    name: str
+    job: str
+    category: str
+    first: datetime
+    last: datetime
+    times: int = 1
+
+
+def _people_by_camera(recognized: list) -> dict[int | None, list[Seen]]:
+    """The people each camera recognized today, in the order they arrived there."""
+    cameras: dict[int | None, dict[object, Seen]] = {}
+    for row in recognized:
+        people = cameras.setdefault(row.camera_id, {})
+        seen = people.get(row.person_id or row.name)
+        if seen is None:
+            people[row.person_id or row.name] = Seen(row.person_id, row.name, row.job, row.category, row.at, row.at)
+        else:
+            seen.last, seen.times = row.at, seen.times + 1
+    return {camera_id: list(people.values()) for camera_id, people in cameras.items()}
+
+
+def _found_by_camera(found: list) -> dict[int | None, list[tuple[str, int]]]:
+    """The kinds of things each camera found today, with how many records each, the most first."""
+    kinds: dict[int | None, list[tuple[str, int]]] = {}
+    for row in sorted(found, key=lambda r: -r.count):
+        kinds.setdefault(row.camera_id, []).append((row.label, row.count))
+    return kinds
 
 
 def _parse_day(text: str) -> date:

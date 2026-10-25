@@ -49,7 +49,7 @@ def people_list(request: Request, q: str = "", show: str = "active") -> HTMLResp
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
         last_seen = dict(session.execute(
             select(Event.person_id, func.max(Event.at))
-            .where(Event.kind == "recognized", Event.door != "")  # the last entry, at a door camera
+            .where(Event.kind == "recognized")  # the last time any face camera recognized them
             .group_by(Event.person_id)
         ).all())
         total = session.scalar(select(func.count()).select_from(Person))

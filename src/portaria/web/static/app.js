@@ -77,23 +77,66 @@
     img.addEventListener("error", () => setTimeout(() => reconnect(img), 3000));
   }
 
-  // Today refreshes its parts every few seconds; the strip of faces keeps its scroll position.
-  let stripScroll = 0;
+  // Today refreshes its panels every few seconds; their strips of faces keep their scroll position.
+  const scrolled = {};
   document.addEventListener("htmx:oobBeforeSwap", () => {
-    stripScroll = document.querySelector("#not-recognized .face-row")?.scrollLeft ?? 0;
+    for (const row of document.querySelectorAll("[data-keep-scroll]")) scrolled[row.dataset.keepScroll] = row.scrollLeft;
   });
   document.addEventListener("htmx:oobAfterSwap", () => {
-    const row = document.querySelector("#not-recognized .face-row");
-    if (row) row.scrollLeft = stripScroll;
+    for (const row of document.querySelectorAll("[data-keep-scroll]")) row.scrollLeft = scrolled[row.dataset.keepScroll] ?? 0;
   });
 
-  // Camera thumbnails: a fresh picture every few seconds.
-  if (document.querySelector("img[data-refresh]")) {
-    setInterval(() => {
-      for (const img of document.querySelectorAll("img[data-refresh]")) {
-        img.src = `${img.dataset.refresh}?t=${Date.now()}`;
+  // Today's list of cameras, beside the menu, follows the camera in view; a click jumps to one (a plain link,
+  // smooth by the stylesheet). While the page glides past other cameras, the list keeps the chosen one.
+  const index = document.querySelector("[data-camera-index]");
+  if (index) {
+    const links = [...index.querySelectorAll("a[data-for]")];
+    const rows = links.map((link) => document.getElementById(link.dataset.for)).filter(Boolean);
+    const inView = new Set();
+    let quietUntil = 0;
+    const mark = (id) => {
+      for (const link of links) {
+        if (link.dataset.for === id) link.setAttribute("aria-current", "true");
+        else link.removeAttribute("aria-current");
       }
-    }, 4000);
+    };
+    const pick = () => {
+      if (performance.now() < quietUntil) return;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 24;
+      const row = atBottom ? rows[rows.length - 1] : rows.find((r) => inView.has(r.id)); // the last can't climb higher
+      if (row) mark(row.id);
+    };
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) inView.add(entry.target.id);
+        else inView.delete(entry.target.id);
+      }
+      pick();
+    }, { rootMargin: "-80px 0px -45% 0px" }); // a camera counts once it reaches the upper half of the window
+    rows.forEach((row) => observer.observe(row));
+    window.addEventListener("scroll", pick, { passive: true });
+    for (const link of links) {
+      link.addEventListener("click", () => {
+        mark(link.dataset.for);
+        quietUntil = performance.now() + 900;
+      });
+    }
+    mark(location.hash.slice(1) || rows[0]?.id);
+  }
+
+  // Camera pictures: a fresh one every few seconds, or as often as the picture asks (data-every, in ms).
+  const refreshing = [...document.querySelectorAll("img[data-refresh]")];
+  if (refreshing.length) {
+    const every = (img) => Number(img.dataset.every || 4000);
+    const due = new Map(refreshing.map((img) => [img, Date.now() + every(img)]));
+    setInterval(() => {
+      const now = Date.now();
+      for (const img of refreshing) {
+        if (now < due.get(img)) continue;
+        due.set(img, now + every(img));
+        img.src = `${img.dataset.refresh}?t=${now}`;
+      }
+    }, 250);
   }
 
   // Toasts, in the bottom-right corner. A result that went well goes away by itself; closing a

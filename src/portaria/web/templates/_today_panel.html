@@ -1,0 +1,103 @@
+{# What a camera recorded today, beside its picture on Today: the people it recognized, with the faces it didn't;
+   the things it found (objects, fire and smoke, falls), with the newest photos. A camera shows what its model
+   records, and anything it recorded earlier today with another model. Refreshed in place with the page. #}
+{% from "_macros.html" import avatar %}
+{% set seen = people.get(c.id, []) %}
+{% set faces = unknown.get(c.id, []) %}
+{% set kinds = found.get(c.id, []) %}
+{% set show_people = c.analysis == "faces" or seen or faces %}
+{% set show_found = c.analysis in thing_models or kinds %}
+<div class="panel cam-panel" id="panel-{{ c.id }}" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if show_people %}
+  <div class="cam-panel-part">
+  <div class="panel-head">
+    <h3>{{ t("People today") }}</h3>
+    <span class="count" title="{{ t('Seen today: {count}', count=seen | length) }}">{{ seen | length }}</span>
+  </div>
+  {% if seen %}
+  {# The last-seen column appears once somebody was seen again. #}
+  {% set again = seen | selectattr("times", "gt", 1) | list | length > 0 %}
+  <table class="entry-table">
+    <thead>
+      <tr>
+        <th scope="col" colspan="2"><span class="visually-hidden">{{ t("Person") }}</span></th>
+        <th scope="col">{{ t("Arrived") }}</th>
+        {% if again %}<th scope="col">{{ t("Last seen") }}</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in seen %}
+      <tr class="entry{% if e.first >= just_now %} is-new{% endif %}">
+        <td class="entry-face">{{ avatar(avatars.get(e.person_id), e.name) }}</td>
+        <th scope="row" class="entry-who">
+          {% if e.person_id %}<a class="entry-name" href="/people/{{ e.person_id }}">{{ e.name }}</a>{% else %}<span class="entry-name">{{ e.name }}</span>{% endif %}
+          {% set role = e.job or (t(categories[e.category]) if e.category in categories else "") %}
+          {% if role %}<span class="entry-meta">{{ role }}</span>{% endif %}
+        </th>
+        <td><time class="entry-time" datetime="{{ e.first.isoformat() }}">{{ e.first.strftime("%H:%M") }}</time></td>
+        {% if again %}
+        <td>{% if e.times > 1 %}<time class="entry-return" datetime="{{ e.last.isoformat() }}">{{ e.last.strftime("%H:%M") }}</time>{% endif %}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="cam-panel-empty">{{ t("Nobody recognized yet today.") }}</p>
+  {% endif %}
+  {% if faces %}
+  <div class="cam-unknown">
+    <div class="cam-panel-sub">
+      <h4>{{ t("Not recognized today") }} <span class="count count-bad">{{ unknown_counts.get(c.id, 0) }}</span></h4>
+      <a href="/records?kind=unknown">{{ t("See the records") }}</a>
+    </div>
+    <ul class="face-row" data-keep-scroll="unknown-{{ c.id }}">
+      {% for e in faces %}
+      <li>
+        <a href="/records?day={{ e.at.date().isoformat() }}#event-{{ e.id }}">
+          {% if e.snapshot %}<img src="/records/{{ e.id }}/face.jpg?w=160" alt="{{ t('Not recognized') if e.kind == 'unknown' else t('Photo or screen suspected') }}" loading="lazy">{% else %}<span class="face-missing"></span>{% endif %}
+          <time datetime="{{ e.at.isoformat() }}">{{ e.at.strftime("%H:%M") }}</time>
+          {% if e.kind == "spoof" %}<span class="face-note">{{ t("Suspicious") }}</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  </div>
+  {% endif %}
+
+  {% if show_found %}
+  <div class="cam-panel-part">
+  <div class="panel-head">
+    <h3>{{ t("Found today") }}</h3>
+    <span class="count">{{ found_totals.get(c.id, 0) }}</span>
+  </div>
+  {% if kinds %}
+  <nav class="kind-chips cam-kinds" aria-label="{{ t('What was found') }}">
+    {% for label, count in kinds %}<a href="/records?view=objects&camera={{ c.id }}&thing={{ label }}">{{ t(things.get(label, label)) }}<span>{{ count }}</span></a>{% endfor %}
+  </nav>
+  <ul class="cam-photos">
+    {% for e in photos.get(c.id, []) %}
+    {% set what = t(things.get(e.label, e.label)) %}
+    <li>
+      <a class="finding-photo" href="/records/{{ e.id }}.jpg" target="_blank" rel="noopener" title="{{ t('Open the whole picture') }}">
+        <img src="/records/{{ e.id }}/face.jpg?w=240" alt="{{ t('{thing} at {time}', thing=what, time=e.at.strftime('%H:%M')) }}" loading="lazy">
+      </a>
+      <p class="found-what"><span>{{ what }}{% if e.count > 1 %} <span class="finding-count">&times;{{ e.count }}</span>{% endif %}</span><time datetime="{{ e.at.isoformat() }}">{{ e.at.strftime("%H:%M") }}</time></p>
+    </li>
+    {% endfor %}
+  </ul>
+  <a class="cam-panel-more" href="/records?view=objects&camera={{ c.id }}">{{ t("See the records") }}</a>
+  {% else %}
+  <p class="cam-panel-empty">{{ t("Nothing found yet today.") }}</p>
+  {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not show_people and not show_found %}
+  <div class="panel-head"><h3>{{ t("Only the live picture") }}</h3></div>
+  <p class="cam-panel-empty">{{ t("This camera has no AI model, so it records nothing.") }}</p>
+  <a class="button button-quiet button-small" href="/cameras/{{ c.id }}">{{ t("Choose an AI model") }}</a>
+  {% endif %}
+</div>

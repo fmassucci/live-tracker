@@ -53,7 +53,7 @@
     </div>
     <div class="small muted">
       {% if last_seen.get(p.id) %}
-      {{ t("Last in: {when}", when=t.day_month(last_seen[p.id]) ~ " " ~ last_seen[p.id].strftime("%H:%M")) }}
+      {{ t("Last seen: {when}", when=t.day_month(last_seen[p.id]) ~ " " ~ last_seen[p.id].strftime("%H:%M")) }}
       {% else %}
       {{ t("Not seen yet") }}
       {% endif %}

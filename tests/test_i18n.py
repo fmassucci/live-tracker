@@ -101,7 +101,7 @@ def test_english_is_the_source_and_portuguese_falls_back_to_it():
     assert i18n.translate("Today", "en") == "Today"
     assert i18n.translate("Today", "pt") == "Hoje"
     assert i18n.translate("Not in the catalog", "pt") == "Not in the catalog"
-    assert i18n.Translator("pt")("In: {count}", count=3) == "Presentes: 3"
+    assert i18n.Translator("pt")("Seen today: {count}", count=3) == "Vistas hoje: 3"
 
 
 def test_dates_and_numbers_follow_the_language():

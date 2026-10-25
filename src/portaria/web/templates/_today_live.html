@@ -1,5 +1,6 @@
 {# Refreshed every few seconds on Today: each part replaces its counterpart by id. #}
 {% set oob = True %}
-{% include "_door_caption.html" %}
-{% include "_not_recognized.html" %}
-{% include "_entries.html" %}
+{% for c in cameras %}
+{% include "_today_panel.html" %}
+{% if cameras | length > 1 %}{% include "_today_index_count.html" %}{% endif %}
+{% endfor %}
