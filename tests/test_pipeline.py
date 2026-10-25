@@ -1,7 +1,7 @@
 import numpy as np
 
 from portaria.camera import Frame
-from portaria.pipeline import RepeatedFrames
+from portaria.pipeline import RateMeter, RepeatedFrames
 
 IMAGE = np.zeros((8, 8, 3), np.uint8)
 
@@ -26,3 +26,12 @@ def test_a_picture_that_stays_the_same_means_the_stream_froze():
     assert not repeats.skip(stuck) and repeats.frozen(stuck)
     moving = _frame(1.3, b"b")
     assert not repeats.skip(moving) and not repeats.frozen(moving)
+
+
+def test_the_frame_rate_counts_frames_and_ignores_a_burst_after_a_slow_look():
+    now = [0.0]
+    meter = RateMeter(clock=lambda: now[0])
+    for i in range(20):  # 10 frames per second, with one frame handled right after another
+        now[0] = i * 0.1 + (0.00003 if i == 10 else 0.0)
+        rate = meter.tick()
+    assert 9 < rate < 11

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -106,16 +107,22 @@ class RepeatedFrames:
 
 
 class RateMeter:
-    """Frames per second, smoothed."""
+    """Frames per second, counted over the last couple of seconds.
 
-    def __init__(self) -> None:
-        self._last: float | None = None
-        self.rate = 0.0
+    Counting, not averaging the gaps between frames: after a slow look, the frame that arrived meanwhile is
+    handled right away, and a gap that short would read as thousands of frames per second.
+    """
+
+    WINDOW_S = 2.0
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._times: deque[float] = deque()
 
     def tick(self) -> float:
-        now = time.monotonic()
-        if self._last is not None and now > self._last:
-            instant = 1.0 / (now - self._last)
-            self.rate = instant if self.rate == 0.0 else 0.9 * self.rate + 0.1 * instant
-        self._last = now
-        return self.rate
+        now = self._clock()
+        self._times.append(now)
+        while now - self._times[0] > self.WINDOW_S:
+            self._times.popleft()
+        span = now - self._times[0]
+        return (len(self._times) - 1) / span if span > 0 else 0.0
