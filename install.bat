@@ -41,6 +41,8 @@ rem A new environment, or a fresh one when the one there no longer works or has 
 
 echo Installing Live Tracker and its libraries. The first time, this takes a few minutes.
 .venv\Scripts\python.exe -m pip install --disable-pip-version-check -e . || goto failed
+rem Installed before under the app's old name, portaria: that package goes, and so does its desktop shortcut below
+.venv\Scripts\python.exe -m pip uninstall --disable-pip-version-check -y -q portaria >nul 2>&1
 
 if not exist config.toml (
     copy config.example.toml config.toml >nul || goto failed
@@ -54,6 +56,7 @@ rem Live Tracker.bat on the desktop runs start.bat from this folder
 set "DESKTOP="
 for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%d"
 if not defined DESKTOP set "DESKTOP=%USERPROFILE%\Desktop"
+if exist "%DESKTOP%\Portaria.bat" del "%DESKTOP%\Portaria.bat"
 set "LAUNCHER=%DESKTOP%\Live Tracker.bat"
 (
     echo @echo off
