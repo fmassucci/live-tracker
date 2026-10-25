@@ -13,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape
 
+from portaria.network import local_ipv4
+
 _MULTICAST = ("239.255.255.250", 3702)
 _PROBE = (
     '<?xml version="1.0" encoding="UTF-8"?>'
@@ -34,7 +36,7 @@ def discover(timeout: float = 3.0) -> dict[str, list[str]]:
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
         sock.bind(("", 0))
-        for address in _local_ipv4():
+        for address in local_ipv4() or ["0.0.0.0"]:
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(address))
             sock.sendto(probe, _MULTICAST)
         sock.settimeout(0.3)
@@ -83,11 +85,6 @@ def stream_urls(device_url: str, user: str, password: str) -> list[tuple[str, st
         if uri:
             urls.append((name, uri.group(1).strip()))
     return urls
-
-
-def _local_ipv4() -> list[str]:
-    addresses = {info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
-    return sorted(a for a in addresses if not a.startswith("127.")) or ["0.0.0.0"]
 
 
 def _call(url: str, body: str, user: str, password: str) -> str:

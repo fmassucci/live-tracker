@@ -53,10 +53,15 @@ python -m portaria web
 
 Open http://127.0.0.1:8000 and sign in with user `admin`, password `admin`. That account is created on the
 first start; every page reminds you to change its password (Settings, Accounts) until you do. More accounts
-can be added in Settings, or with `python -m portaria create-user <name>`.
+can be added in Settings, or with `python -m portaria create-user <name>`. Only administrators add accounts,
+edit the others (administrator or not, a new password) or remove them, and see Settings, Database. `admin` is
+one, and so is every account made before administrators existed. At least one administrator always remains.
 
-To use it from other computers and the door tablet, set `[web] host = "0.0.0.0"` and open the server's
-address. The door screen's address (with its secret key) is in Settings.
+Phones, tablets and other computers on the same network open it at the address shown in Settings (System)
+and printed by `web` when it starts, such as http://192.168.0.10:8000. The first time, Windows Firewall asks
+whether Python may use the network: allow it on private or public networks, whichever Windows has set for the
+Wi-Fi. Anyone on the network can reach the sign-in page, so change the `admin` password first. To allow only
+this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with its secret key) is there too.
 
 ### First steps in the UI
 
@@ -72,7 +77,9 @@ address. The door screen's address (with its secret key) is in Settings.
    taken by the door camera itself (*Take photos with a camera*) match best. Photos require confirming that the
    person was told how their face is used (LGPD).
 3. **Today:** entries appear on the time card as the camera recognizes people.
-4. **Settings:** name and logo shown in the app, door screen address, accounts.
+4. **Settings:** name and logo shown in the app and accounts. *System* has the addresses for this computer,
+   phones and tablets, and the door screen's address. *Database*, for administrators, has where the images
+   are stored, and downloads or deletes records with their pictures.
 
 ## Command line
 
@@ -105,6 +112,14 @@ data/photos/<id>/        face photos
 data/snapshots/<day>/    one picture per decision (and a face crop), deleted after [storage] retention_days
 data/branding/logo.png   the logo set in Settings
 ```
+
+Settings, Database (administrators only):
+
+- *Open folder* opens this folder in the file manager. It only shows on the computer that runs the system,
+  since the folder opens on that computer's screen.
+- *Download .zip* sends the records of the days chosen (or all of them) as a spreadsheet, `Registros_<first
+  day>_<last day>.csv` (semicolons in Portuguese, for Excel), with their pictures in `snapshots/<day>/`.
+- *Delete records and pictures* deletes the same records, after confirming. Both go to the audit log.
 
 `data/` holds biometric data and `config.toml` may hold camera passwords; both are git-ignored. Never commit them
 or copy them to shared drives, and keep the server's disk encrypted (BitLocker on Windows, LUKS on Linux).

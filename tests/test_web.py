@@ -1,3 +1,6 @@
+import io
+import re
+import zipfile
 from datetime import date, datetime, time
 from types import SimpleNamespace
 
@@ -8,7 +11,9 @@ from conftest import FakeTools
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from portaria.db import Camera, Event, get_setting
+from portaria.db import AuditEntry, Camera, Event, Person, User, get_setting
+from portaria.events import face_path
+from portaria.users import authenticate, create_user, is_admin
 from portaria.web.app import create_app
 from portaria.web.common import recording_state
 
@@ -130,6 +135,157 @@ def test_logo_upload_is_stored_as_png_and_shown(client, cfg):
     assert logo.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert cv2.imread(str(logo)).shape[1] <= 512
     assert '/branding/logo.png?v=' in client.get("/").text
+
+
+def test_settings_shows_the_addresses_to_open_the_app(client, monkeypatch):
+    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19", "10.0.0.5"])
+    text = client.get("/settings").text
+    assert 'value="http://127.0.0.1:8000"' in text
+    assert 'value="http://192.168.0.19:8000"' in text and 'value="http://10.0.0.5:8000"' in text
+    assert "Se o primeiro endereço não abrir, tente o próximo." in text
+
+
+def test_the_door_screen_address_is_the_one_the_tablet_opens(client, app, monkeypatch):
+    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19"])
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Porta", url="0", device="door"))
+        session.flush()
+        key = get_setting(session, "door_screen_key")
+    assert f'value="http://192.168.0.19:8000/door?camera=1&key={key}"' in client.get("/settings").text
+
+
+def test_settings_says_when_only_this_computer_can_open_the_app(client, cfg):
+    cfg.web.host = "127.0.0.1"
+    text = client.get("/settings").text
+    assert 'value="http://127.0.0.1:8000"' in text
+    assert "Só este computador consegue acessar o sistema." in text
+
+
+@pytest.fixture
+def opened(monkeypatch):
+    """Folders the Settings button showed, instead of showing them on the screen."""
+    folders = []
+    monkeypatch.setattr("portaria.web.data.open_folder", folders.append)
+    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19"])
+    return folders
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "192.168.0.19"])  # this computer, by either of its addresses
+def test_settings_opens_the_images_folder_on_this_computer(app, cfg, opened, address):
+    with TestClient(app, client=(address, 50000)) as here:
+        here.post("/login", data={"username": "admin", "password": "admin"})
+        assert 'action="/settings/data-folder"' in here.get("/settings").text
+        assert here.post("/settings/data-folder", follow_redirects=False).status_code == 303
+    assert opened == [cfg.paths.data_dir.resolve()]
+
+
+def test_other_devices_see_where_the_images_are_but_cannot_open_the_folder(client, cfg, opened):
+    text = client.get("/settings").text
+    assert f'value="{cfg.paths.data_dir.resolve()}"' in text
+    assert 'action="/settings/data-folder"' not in text
+    assert "acesse as Configurações no computador onde o sistema está instalado" in text
+    assert client.post("/settings/data-folder").status_code == 403
+    assert opened == []
+
+
+def test_only_administrators_see_the_database_and_add_accounts(app, client, opened):
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with TestClient(app, client=("127.0.0.1", 50000)) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        text = cashier.get("/settings").text
+        assert 'id="data"' not in text and 'action="/settings/users"' not in text
+        assert cashier.post("/settings/users", data={"username": "chefe", "password": "senha-do-chefe",
+                                                     "administrator": "true"}).status_code == 403
+        assert cashier.post("/settings/data/export").status_code == 403
+        assert cashier.post("/settings/data/delete", data={"confirm": "true"}).status_code == 403
+        assert cashier.get("/settings/data/summary").status_code == 403
+        assert cashier.post("/settings/data-folder").status_code == 403
+        assert 'action="/settings/users/1"' not in text  # admin's account: no editing it
+        assert cashier.post("/settings/users/1", data={"password": "tomei-a-conta"}).status_code == 403
+        assert cashier.post("/settings/users/1/delete", data={"confirm": "true"}).status_code == 403
+    assert opened == []
+    assert 'id="data"' in client.get("/settings").text  # admin, the first account, is an administrator
+    client.post("/settings/users", data={"username": "gerente", "password": "senha-do-gerente", "administrator": "true"})
+    with app.state.services.db.session() as session:
+        assert is_admin(session, "gerente") and not is_admin(session, "caixa")
+
+
+def test_an_administrator_edits_and_removes_the_other_accounts(app, client):
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with app.state.services.db.session() as session:
+        cashier_id, admin_id = (session.scalar(select(User.id).where(User.username == name)) for name in ("caixa", "admin"))
+    text = client.get("/settings").text
+    assert f'action="/settings/users/{cashier_id}"' in text and f'action="/settings/users/{admin_id}"' not in text
+    response = client.post(f"/settings/users/{cashier_id}", data={"administrator": "true", "password": "nova-senha-1"})
+    assert "Conta caixa salva." in response.text
+    with app.state.services.db.session() as session:
+        assert is_admin(session, "caixa") and authenticate(session, "caixa", "nova-senha-1")
+    with TestClient(app) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "nova-senha-1"})
+        client.post(f"/settings/users/{cashier_id}/delete")  # not confirmed
+        assert cashier.get("/people", follow_redirects=False).status_code == 200
+        response = client.post(f"/settings/users/{cashier_id}/delete", data={"confirm": "true"})
+        assert "Conta caixa removida." in response.text
+        assert cashier.get("/people", follow_redirects=False).status_code == 303  # signed out at once
+    # Your own account changes in Change my password, and you can't remove it yourself.
+    assert client.post(f"/settings/users/{admin_id}", data={"password": "outra-senha-1"}).status_code == 403
+    assert client.post(f"/settings/users/{admin_id}/delete", data={"confirm": "true"}).status_code == 403
+
+
+def _record(app, cfg, at: datetime, kind: str = "recognized", name: str | None = "Ana") -> str:
+    """A record with its picture and face crop on disk, as the recognition service leaves them."""
+    snapshot = f"snapshots/{at:%Y-%m-%d}/{at:%H%M%S_%f}_{kind}.jpg"
+    for path in (cfg.paths.data_dir / snapshot, cfg.paths.data_dir / face_path(snapshot)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"picture")
+    with app.state.services.db.session() as session:
+        session.add(Event(at=at, kind=kind, person_name=name, score=0.712, snapshot=snapshot, door="shadow",
+                          model="auraface", liveness="none"))
+    return snapshot
+
+
+def test_records_download_as_a_spreadsheet_and_pictures(app, cfg, client):
+    first = _record(app, cfg, datetime(2026, 10, 22, 7, 58))
+    second = _record(app, cfg, datetime(2026, 10, 23, 8, 1), kind="unknown", name=None)
+    _record(app, cfg, datetime(2026, 10, 24, 8, 3))  # after the period
+    response = client.post("/settings/data/export", data={"start": "2026-10-22", "end": "2026-10-23"})
+    assert response.headers["content-disposition"] == "attachment; filename*=UTF-8''Registros_2026-10-22_2026-10-23.zip"
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert sorted(archive.namelist()) == sorted(["Registros_2026-10-22_2026-10-23.csv", first, second])
+    table = archive.read("Registros_2026-10-22_2026-10-23.csv").decode("utf-8-sig").splitlines()
+    assert table == [
+        "Data;Hora;Pessoa;Resultado;Câmera;Porta;Semelhança;Imagem",
+        f"2026-10-22;07:58:00;Ana;Reconhecido;;modo de teste, porta continuou fechada;0,71;{first}",
+        f"2026-10-23;08:01:00;;Não reconhecido;;modo de teste, porta continuou fechada;0,71;{second}",
+    ]
+    assert client.post("/settings/data/export", data={"start": "2026-11-01"}).url.path == "/settings"  # nothing to send
+
+
+def test_the_count_follows_the_days_chosen(app, cfg, client):
+    for day in (22, 23, 23):
+        _record(app, cfg, datetime(2026, 10, day, 8, 0))
+    assert "3 registros, de 22/10/2026 a 23/10/2026." in client.get("/settings").text
+    assert client.get("/settings/data/summary?start=2026-10-23&end=").text.strip() == "2 registros, em 23/10/2026."
+    assert client.get("/settings/data/summary?start=2026-10-24").text.strip() == "Nenhum registro neste período."
+    assert client.get("/settings/data/summary?start=amanha").status_code == 400  # never read as "every day"
+
+
+def test_deleting_records_needs_the_confirmation_and_keeps_the_other_days(app, cfg, client):
+    kept = _record(app, cfg, datetime(2026, 10, 22, 7, 58))
+    deleted = _record(app, cfg, datetime(2026, 10, 23, 8, 1))
+    client.post("/settings/data/delete", data={"start": "2026-10-23", "end": "2026-10-23"})
+    assert (cfg.paths.data_dir / deleted).is_file()  # not confirmed
+    response = client.post("/settings/data/delete", data={"start": "2026-10-23", "end": "2026-10-23", "confirm": "true"})
+    assert "Registros excluídos: 1." in response.text
+    assert not (cfg.paths.data_dir / deleted).parent.exists()  # the day's folder went with its last picture
+    assert (cfg.paths.data_dir / kept).is_file() and (cfg.paths.data_dir / face_path(kept)).is_file()
+    with app.state.services.db.session() as session:
+        assert [e.snapshot for e in session.scalars(select(Event))] == [kept]
+        assert session.scalar(select(AuditEntry.detail).where(AuditEntry.action == "records deleted")) == (
+            "2026-10-23 to 2026-10-23: 1"
+        )
 
 
 def test_recording_state_says_why_a_camera_is_not_recording():

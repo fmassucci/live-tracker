@@ -1,0 +1,7 @@
+{# How many records the days chosen in Settings, Database have: what Download .zip and Delete would take. #}
+{% if not summary.count %}{{ t("No records in this period.") if dated else t("No records yet.") }}
+{% elif summary.first.date() == summary.last.date() %}
+{%- if summary.count == 1 %}{{ t("1 record, on {day}.", day=t.short_date(summary.first)) }}
+{%- else %}{{ t("{count} records, on {day}.", count=summary.count, day=t.short_date(summary.first)) }}{% endif %}
+{% else %}{{ t("{count} records, from {first} to {last}.", count=summary.count, first=t.short_date(summary.first), last=t.short_date(summary.last)) }}
+{% endif %}

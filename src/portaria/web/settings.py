@@ -1,4 +1,7 @@
-"""Settings: the name and logo shown in the app, the door screen address, and accounts."""
+"""Settings: the name and logo shown in the app, accounts, the app's addresses and the door screen's.
+
+The Database panel's actions are in data.py.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +13,14 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from portaria.db import Camera, User, audit, get_setting, set_setting
-from portaria.users import AccountError, create_user, set_password
-from portaria.web.common import flash, page, require_user, services
+from portaria.users import AccountError, create_user, is_admin, remove_user, set_admin, set_password
+from portaria.web.common import (
+    flash, on_this_computer, page, require_admin, require_user, services, web_addresses,
+)
+from portaria.web.data import summary
 
 router = APIRouter()
 admin = APIRouter(dependencies=[Depends(require_user)])
@@ -28,9 +35,16 @@ def settings_page(request: Request) -> HTMLResponse:
         display_name = get_setting(session, "display_name") or ""
         door_key = get_setting(session, "door_screen_key")
         door_cameras = session.scalars(select(Camera).where(Camera.device == "door").order_by(Camera.name)).all()
-        users = session.scalars(select(User).order_by(User.username)).all()
+        me = request.session["user"]
+        users = session.scalars(select(User).order_by(User.username != me, User.username)).all()  # yours first
+        admin_signed_in = is_admin(session, me)
+    here, others = web_addresses(s.cfg)
+    door_base_url = others[0] if others else str(request.base_url).rstrip("/")  # the address the tablet opens
     return page(request, "settings.html", section="settings", display_name=display_name, door_key=door_key,
-                door_cameras=door_cameras, users=users, cfg=s.cfg, base_url=str(request.base_url).rstrip("/"))
+                door_cameras=door_cameras, users=users, cfg=s.cfg, door_base_url=door_base_url,
+                here_address=here, network_addresses=others, is_admin=admin_signed_in,
+                data_folder=s.cfg.paths.data_dir.resolve(), on_this_computer=on_this_computer(request),
+                summary=summary(request) if admin_signed_in else None, dated=False)
 
 
 @admin.post("/settings/identity")
@@ -85,11 +99,14 @@ def new_door_key(request: Request) -> RedirectResponse:
 
 
 @admin.post("/settings/users")
-def add_user(request: Request, username: str = Form(""), password: str = Form("")) -> RedirectResponse:
+def add_user(
+    request: Request, username: str = Form(""), password: str = Form(""), administrator: bool = Form(False),
+    user: str = Depends(require_admin),  # otherwise anyone could make themselves an administrator
+) -> RedirectResponse:
     try:
         with services(request).db.session() as session:
-            create_user(session, username, password)
-            audit(session, request.session["user"], "account created", username.strip())
+            create_user(session, username, password, admin=administrator)
+            audit(session, user, "account created", username.strip() + (" (administrator)" if administrator else ""))
     except AccountError as e:
         flash(request, str(e), "bad")
     else:
@@ -112,6 +129,61 @@ def change_password(request: Request, password: str = Form(""), password_again: 
         request.session.pop("default_password", None)
         flash(request, "Password changed.")
     return RedirectResponse("/settings#accounts", status_code=303)
+
+
+@admin.post("/settings/users/{user_id}")
+def edit_user(
+    request: Request, user_id: int, administrator: bool = Form(False), password: str = Form(""),
+    user: str = Depends(require_admin),
+) -> RedirectResponse:
+    """Another account's role, and a new password when the person forgot theirs."""
+    try:
+        with services(request).db.session() as session:
+            account = _other_account(session, user_id, user)
+            name, changes = account.username, []
+            if administrator != account.is_admin:
+                set_admin(session, account, administrator)
+                changes.append("administrator" if administrator else "not administrator")
+            if password:
+                set_password(session, name, password)
+                changes.append("new password")
+            if changes:
+                audit(session, user, "account changed", f"{name}: {', '.join(changes)}")
+    except AccountError as e:
+        flash(request, str(e), "bad")
+    else:
+        flash(request, "Account {name} saved.", name=name)
+    return RedirectResponse("/settings#accounts", status_code=303)
+
+
+@admin.post("/settings/users/{user_id}/delete")
+def delete_user(
+    request: Request, user_id: int, confirm: bool = Form(False), user: str = Depends(require_admin)
+) -> RedirectResponse:
+    if not confirm:
+        flash(request, "Confirm that you understand this can't be undone.", "bad")
+        return RedirectResponse("/settings#accounts", status_code=303)
+    try:
+        with services(request).db.session() as session:
+            account = _other_account(session, user_id, user)
+            name = account.username
+            remove_user(session, account)
+            audit(session, user, "account removed", name)
+    except AccountError as e:
+        flash(request, str(e), "bad")
+    else:
+        flash(request, "Account {name} removed.", name=name)
+    return RedirectResponse("/settings#accounts", status_code=303)
+
+
+def _other_account(session: Session, user_id: int, signed_in: str) -> User:
+    """Someone else's account: yours changes in Change my password, and you can't remove it yourself."""
+    account = session.get(User, user_id)
+    if account is None:
+        raise HTTPException(404)
+    if account.username == signed_in:
+        raise HTTPException(403)
+    return account
 
 
 @router.get("/branding/logo.png")

@@ -124,6 +124,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(60), unique=True)
     password_hash: Mapped[str] = mapped_column(String(200))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)  # adds accounts, downloads and deletes records
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
 

@@ -50,7 +50,7 @@ def ensure_default_user(session: Session) -> bool:
     """Creates admin/admin when there are no accounts yet. Returns whether it did."""
     if has_users(session):
         return False
-    session.add(User(username=DEFAULT_USERNAME, password_hash=hash_password(DEFAULT_PASSWORD)))
+    session.add(User(username=DEFAULT_USERNAME, password_hash=hash_password(DEFAULT_PASSWORD), is_admin=True))
     return True
 
 
@@ -58,7 +58,11 @@ def user_exists(session: Session, username: str) -> bool:
     return session.scalar(select(User.id).where(User.username == username)) is not None
 
 
-def create_user(session: Session, username: str, password: str) -> User:
+def is_admin(session: Session, username: str) -> bool:
+    return bool(session.scalar(select(User.is_admin).where(User.username == username)))
+
+
+def create_user(session: Session, username: str, password: str, *, admin: bool = False) -> User:
     username = username.strip()
     if not _USERNAME.match(username):
         raise AccountError("Use 3 to 60 letters, numbers, dots or dashes for the user name.")
@@ -66,7 +70,7 @@ def create_user(session: Session, username: str, password: str) -> User:
         raise AccountError("The password needs at least 8 characters.")
     if session.scalar(select(User).where(User.username == username)):
         raise AccountError("This user name is already taken.")
-    user = User(username=username, password_hash=hash_password(password))
+    user = User(username=username, password_hash=hash_password(password), is_admin=admin)
     session.add(user)
     return user
 
@@ -78,6 +82,25 @@ def set_password(session: Session, username: str, password: str) -> None:
     if user is None:
         raise AccountError("This user no longer exists.")
     user.password_hash = hash_password(password)
+
+
+def set_admin(session: Session, user: User, admin: bool) -> None:
+    if user.is_admin and not admin:
+        _keep_an_administrator(session)
+    user.is_admin = admin
+
+
+def remove_user(session: Session, user: User) -> None:
+    """The person can't sign in any more, and their open sessions end. The audit log keeps their name."""
+    if user.is_admin:
+        _keep_an_administrator(session)
+    session.delete(user)
+
+
+def _keep_an_administrator(session: Session) -> None:
+    """Someone has to be able to add accounts and manage the database."""
+    if session.scalar(select(func.count()).select_from(User).where(User.is_admin)) <= 1:
+        raise AccountError("At least one administrator has to remain.")
 
 
 def authenticate(session: Session, username: str, password: str) -> User | None:

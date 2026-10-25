@@ -452,8 +452,22 @@ a.entry-name:hover { color: var(--orange-ink); }
 .logo-sample { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 12px 14px; border-radius: var(--radius-control); background: var(--surface-2); font-weight: 650; }
 .copy-field { display: flex; gap: 8px; }
 .copy-field input { font-size: 13.5px; }
+.records-summary { margin-bottom: 14px; font-weight: 550; }
+.date-range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.date-range .field { margin-bottom: 6px; }
+.date-range input { min-width: 0; } /* a date field doesn't shrink below its text by itself */
 .user-list { list-style: none; margin: 0 0 16px; padding: 0; }
 .user-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+/* Someone else's account, opened in place to edit or remove it */
+.user-list details { flex: 1; min-width: 0; }
+.user-list summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; cursor: pointer; list-style: none; }
+.user-list summary::-webkit-details-marker { display: none; }
+.user-list summary .muted { margin-left: auto; }
+.user-list details[open] summary .button { background: var(--surface-2); }
+.user-edit { display: grid; gap: 4px; padding: 16px 0 4px; }
+.user-edit .button { justify-self: start; }
+.user-remove { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px; margin: 14px 0 6px; }
+.user-remove .check { margin: 0; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 24px; margin: 0; }
 .facts dt { color: var(--ink-2); }
 .facts dd { margin: 0; font-weight: 550; }
@@ -522,6 +536,8 @@ a.entry-name:hover { color: var(--orange-ink); }
   .settings-block { padding: 18px; gap: 18px; }
   .account-initial { display: none; }
   .day-nav { margin-left: 0; }
+  .copy-label { display: none; } /* buttons next to an address or folder keep only their icon, so more of it shows */
+  .date-range { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
 @media (orientation: portrait), (max-width: 860px) {
   .kiosk-body { grid-template-columns: 1fr; gap: 28px; }

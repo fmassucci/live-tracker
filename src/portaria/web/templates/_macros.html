@@ -1,5 +1,5 @@
 {% macro icon(name, extra="") -%}
-<svg class="icon {{ extra }}" aria-hidden="true"><use href="/static/icons.svg#{{ name }}"></use></svg>
+<svg class="icon {{ extra }}" aria-hidden="true"><use href="/static/icons.svg?v={{ asset_version }}#{{ name }}"></use></svg>
 {%- endmacro %}
 
 {% macro avatar(photo_id, name, extra="") -%}

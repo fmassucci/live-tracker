@@ -42,46 +42,49 @@
     </div>
   </section>
 
-  <section class="settings-block" id="door-screen">
-    <div>
-      <h2>{{ t("Door screen") }}</h2>
-      <p>{{ t("Open this address on the tablet at the entrance: it tells people whether they were recognized. Anyone with the address sees the door camera, so keep it private.") }}</p>
-    </div>
-    <div>
-      {% for c in door_cameras %}
-      <div class="field">
-        <label for="door-{{ c.id }}">{{ c.name }}</label>
-        <div class="copy-field">
-          <input type="text" id="door-{{ c.id }}" value="{{ base_url }}/door?camera={{ c.id }}&key={{ door_key }}" readonly>
-          <button type="button" class="button button-quiet" data-copy="door-{{ c.id }}" data-copied="{{ t('Copied') }}">{{ icon("copy") }}{{ t("Copy") }}</button>
-          <a class="button button-quiet" href="/door?camera={{ c.id }}&key={{ door_key }}" target="_blank" rel="noopener">{{ icon("external") }}{{ t("Open") }}</a>
-        </div>
-      </div>
-      {% else %}
-      <p class="muted">{{ t("Add a door camera first.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
-      {% endfor %}
-      {% if door_cameras %}
-      <form method="post" action="/settings/door-screen/new-key">
-        <button class="button button-quiet button-small">{{ t("Create a new address") }}</button>
-      </form>
-      {% endif %}
-    </div>
-  </section>
-
   <section class="settings-block" id="accounts">
     <div>
       <h2>{{ t("Accounts") }}</h2>
-      <p>{{ t("Who can sign in here. Everyone has the same access.") }}</p>
+      <p>{{ t("Who can sign in here. Only administrators add accounts and see Database.") }}</p>
     </div>
     <div>
       <ul class="user-list">
         {% for u in users %}
+        {% set facts %}
+        <span class="muted small">
+          {% if u.is_admin %}{{ t("Administrator") }} · {% endif %}
+          {% if u.last_login_at %}{{ t("Last sign-in: {when}", when=t.day_month(u.last_login_at) ~ " " ~ u.last_login_at.strftime("%H:%M")) }}{% else %}{{ t("Never signed in") }}{% endif %}
+        </span>
+        {% endset %}
+        {% if is_admin and u.username != user %}
+        {# Someone else's account: an administrator changes its role, gives it a new password or removes it. #}
+        <li id="account-{{ u.id }}">
+          <details>
+            <summary><span>{{ u.username }}</span>{{ facts }}<span class="button button-quiet button-small">{{ icon("pencil") }}{{ t("Edit") }}</span></summary>
+            <form method="post" action="/settings/users/{{ u.id }}" class="user-edit">
+              <label class="check">
+                <input type="checkbox" name="administrator" value="true" {% if u.is_admin %}checked{% endif %}>
+                <span>{{ t("Administrator") }}<span class="hint">{{ t("Can add accounts, and download and delete records.") }}</span></span>
+              </label>
+              <div class="field">
+                <label for="password-{{ u.id }}">{{ t("New password") }}</label>
+                <input type="password" id="password-{{ u.id }}" name="password" minlength="8" autocomplete="new-password">
+                <span class="hint">{{ t("Leave it empty to keep the current password.") }}</span>
+              </div>
+              <button class="button">{{ t("Save") }}</button>
+            </form>
+            <form method="post" action="/settings/users/{{ u.id }}/delete" class="danger-zone user-remove">
+              <label class="check"><input type="checkbox" name="confirm" value="true" required><span>{{ t("I understand this can't be undone") }}</span></label>
+              <button class="button button-danger button-small">{{ icon("trash") }}{{ t("Remove account") }}</button>
+            </form>
+          </details>
+        </li>
+        {% else %}
         <li>
           <span>{{ u.username }}{% if u.username == user %} ({{ t("you") }}){% endif %}</span>
-          <span class="muted small">
-            {% if u.last_login_at %}{{ t("Last sign-in: {when}", when=t.day_month(u.last_login_at) ~ " " ~ u.last_login_at.strftime("%H:%M")) }}{% else %}{{ t("Never signed in") }}{% endif %}
-          </span>
+          {{ facts }}
         </li>
+        {% endif %}
         {% endfor %}
       </ul>
       <form method="post" action="/settings/password" class="subpanel">
@@ -97,6 +100,7 @@
         </div>
         <button class="button">{{ t("Change password") }}</button>
       </form>
+      {% if is_admin %}
       <form method="post" action="/settings/users" class="subpanel" style="margin-top: 12px">
         <h3>{{ t("Add an account") }}</h3>
         <div class="field">
@@ -108,26 +112,132 @@
           <input type="password" id="new-password" name="password" required minlength="8" autocomplete="new-password">
           <span class="hint">{{ t("At least 8 characters.") }}</span>
         </div>
+        <label class="check">
+          <input type="checkbox" name="administrator" value="true">
+          <span>{{ t("Administrator") }}<span class="hint">{{ t("Can add accounts, and download and delete records.") }}</span></span>
+        </label>
         <button class="button button-quiet">{{ t("Add account") }}</button>
       </form>
+      {% endif %}
     </div>
   </section>
 
   <section class="settings-block" id="system">
     <div>
       <h2>{{ t("System") }}</h2>
-      <p>{{ t("Set in config.toml on the server.") }}</p>
+      <p>{{ t("How each device opens the system. The rest is set in config.toml on the server.") }}</p>
     </div>
-    <dl class="facts">
-      <dt>{{ t("Door") }}</dt>
-      <dd>{{ t("Test mode: decisions are only recorded") if cfg.door.mode == "shadow" else t("Opens for recognized people") }}</dd>
-      <dt>{{ t("Recognition model") }}</dt>
-      <dd>{{ cfg.recognition.model }}</dd>
-      <dt>{{ t("Records kept for") }}</dt>
-      <dd>{{ t("{days} days", days=cfg.storage.retention_days) }}</dd>
-      <dt>{{ t("Default language") }}</dt>
-      <dd>{{ "Português" if cfg.web.language == "pt" else "English" }}</dd>
-    </dl>
+    <div>
+      <div class="subpanel" id="addresses" style="margin-bottom: 18px">
+        <h3>{{ t("How to connect") }}</h3>
+        <div class="field">
+          <label for="address-here">{{ t("On this computer") }}</label>
+          <div class="copy-field">
+            <input type="text" id="address-here" value="{{ here_address }}" readonly>
+            <button type="button" class="button button-quiet" data-copy="address-here" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
+          </div>
+        </div>
+        <fieldset class="field" style="margin-bottom: 0">
+          <legend id="address-phones">{{ t("On phones and tablets") }}</legend>
+          {% for address in network_addresses %}
+          <div class="copy-field">
+            <input type="text" id="address-{{ loop.index }}" value="{{ address }}" aria-labelledby="address-phones" readonly>
+            <button type="button" class="button button-quiet" data-copy="address-{{ loop.index }}" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
+          </div>
+          {% else %}
+          <p class="muted">{{ t("This computer isn't connected to a network.") if cfg.web.host == "0.0.0.0" else t("Only this computer can open the system. To open it on phones and tablets, set [web] host to 0.0.0.0 in config.toml.") }}</p>
+          {% endfor %}
+          {% if network_addresses %}
+          <span class="hint">{{ t("The phone or tablet must be on the same Wi-Fi as this computer.") }}{% if network_addresses | length > 1 %} {{ t("If the first address doesn't open, try the next one.") }}{% endif %}</span>
+          {% endif %}
+        </fieldset>
+      </div>
+      <div class="subpanel" id="door-screen" style="margin-bottom: 18px">
+        <h3>{{ t("Door screen") }}</h3>
+        {% for c in door_cameras %}
+        <div class="field">
+          <label for="door-{{ c.id }}">{{ c.name }}</label>
+          <div class="copy-field">
+            <input type="text" id="door-{{ c.id }}" value="{{ door_base_url }}/door?camera={{ c.id }}&key={{ door_key }}" readonly>
+            <button type="button" class="button button-quiet" data-copy="door-{{ c.id }}" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
+            <a class="button button-quiet" href="/door?camera={{ c.id }}&key={{ door_key }}" target="_blank" rel="noopener" aria-label="{{ t('Open') }}">{{ icon("external") }}<span class="copy-label">{{ t("Open") }}</span></a>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted">{{ t("Add a door camera first.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
+        {% endfor %}
+        {% if door_cameras %}
+        <p class="hint" style="margin-bottom: 12px">{{ t("Open this address on the tablet at the entrance: it tells people whether they were recognized. Anyone with the address sees the door camera, so keep it private.") }}</p>
+        <form method="post" action="/settings/door-screen/new-key">
+          <button class="button button-quiet button-small">{{ t("Create a new address") }}</button>
+        </form>
+        {% endif %}
+      </div>
+      <dl class="facts">
+        <dt>{{ t("Door") }}</dt>
+        <dd>{{ t("Test mode: decisions are only recorded") if cfg.door.mode == "shadow" else t("Opens for recognized people") }}</dd>
+        <dt>{{ t("Recognition model") }}</dt>
+        <dd>{{ cfg.recognition.model }}</dd>
+        <dt>{{ t("Records kept for") }}</dt>
+        <dd>{{ t("{days} days", days=cfg.storage.retention_days) }}</dd>
+        <dt>{{ t("Default language") }}</dt>
+        <dd>{{ "Português" if cfg.web.language == "pt" else "English" }}</dd>
+      </dl>
+    </div>
   </section>
+
+  {% if is_admin %}
+  <section class="settings-block" id="data">
+    <div>
+      <h2>{{ t("Database") }}</h2>
+      <p>{{ t("Only administrators see this part. Records and their pictures are deleted automatically after {days} days.", days=cfg.storage.retention_days) }}</p>
+    </div>
+    <div>
+      <div class="subpanel" id="images" style="margin-bottom: 18px">
+        <h3 id="images-title">{{ t("Where the images are stored") }}</h3>
+        <div class="field" style="margin-bottom: 0">
+          <div class="copy-field">
+            <input type="text" id="data-folder" value="{{ data_folder }}" aria-labelledby="images-title" readonly>
+            {% if on_this_computer %}
+            <form method="post" action="/settings/data-folder" style="display: contents">
+              <button class="button button-quiet" aria-label="{{ t('Open folder') }}">{{ icon("folder-open") }}<span class="copy-label">{{ t("Open folder") }}</span></button>
+            </form>
+            {% endif %}
+          </div>
+          <span class="hint">{{ t("Pictures from Records are in the snapshots folder, with one folder per day; people's photos are in the photos folder.") }} {{ t("They show people's faces, so don't copy them to shared folders.") }}</span>
+          {% if not on_this_computer %}
+          <span class="hint">{{ t("To open the folder, open Settings on the computer where the system is installed.") }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {# The days chosen apply to both buttons, and the count above them follows the days (/settings/data/summary).
+         The count asks from the dates alone: htmx checks a whole form first, and the unticked confirmation would stop it. #}
+      <form class="subpanel" id="records-data" method="post" action="/settings/data/export">
+        <h3>{{ t("Records and pictures") }}</h3>
+        <p id="records-summary" class="records-summary" aria-live="polite">{% include "_records_summary.html" %}</p>
+        <div class="date-range" hx-get="/settings/data/summary" hx-trigger="change" hx-include="this" hx-target="#records-summary">
+          <div class="field">
+            <label for="records-start">{{ t("From") }}</label>
+            <input type="date" id="records-start" name="start">
+          </div>
+          <div class="field">
+            <label for="records-end">{{ t("To") }}</label>
+            <input type="date" id="records-end" name="end">
+          </div>
+        </div>
+        <span class="hint">{{ t("Leave the dates empty to include every record.") }}</span>
+        <div class="actions" style="margin: 16px 0 8px">
+          <button class="button" formnovalidate>{{ icon("download") }}{{ t("Download .zip") }}</button>
+        </div>
+        <span class="hint">{{ t("A spreadsheet of the records (CSV) and their pictures. The pictures show people's faces: keep the file somewhere safe.") }}</span>
+        <div class="danger-zone" style="margin-top: 18px">
+          <label class="check"><input type="checkbox" name="confirm" value="true" required><span>{{ t("I understand this can't be undone") }}</span></label>
+          <button class="button button-danger" formaction="/settings/data/delete">{{ icon("trash") }}{{ t("Delete records and pictures") }}</button>
+          <p class="hint" style="margin-top: 10px">{{ t("Download the .zip first to keep a copy.") }}</p>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

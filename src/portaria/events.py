@@ -5,16 +5,20 @@ Next to each snapshot (x.jpg) goes a crop of the face (x.face.jpg), used for thu
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import logging
+from contextlib import suppress
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import cv2
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, select, true
 
 from portaria.db import Camera, Database, Event, Person
 from portaria.decision import Decision
 from portaria.images import write_jpeg
+
+log = logging.getLogger(__name__)
 
 
 class EventLog:
@@ -78,19 +82,43 @@ def face_crop(image: np.ndarray, box: np.ndarray, margin: float = 0.5, size: int
     return crop
 
 
+def in_period(first: date | None, last: date | None) -> ColumnElement[bool]:
+    """Events from the day `first` to the day `last`, both included. A missing day leaves that side open."""
+    conditions = [true()]
+    if first:
+        conditions.append(Event.at >= datetime.combine(first, time.min))
+    if last:
+        conditions.append(Event.at < datetime.combine(last + timedelta(days=1), time.min))
+    return and_(*conditions)
+
+
+def delete_events(db: Database, data_dir: Path, first: date | None, last: date | None) -> int:
+    """Deletes the events from `first` to `last` (see in_period), with their snapshots. Returns how many."""
+    return _delete_events(db, data_dir, in_period(first, last))
+
+
 def purge_events(db: Database, data_dir: Path, older_than_days: int) -> int:
     """Deletes events older than the retention period, with their snapshots. Returns how many."""
-    cutoff = datetime.now() - timedelta(days=older_than_days)
+    return _delete_events(db, data_dir, Event.at < datetime.now() - timedelta(days=older_than_days))
+
+
+def _delete_events(db: Database, data_dir: Path, condition: ColumnElement[bool]) -> int:
     with db.session() as session:
-        old = session.scalars(select(Event).where(Event.at < cutoff)).all()
-        for event in old:
-            if event.snapshot:
-                (data_dir / event.snapshot).unlink(missing_ok=True)
-                (data_dir / face_path(event.snapshot)).unlink(missing_ok=True)
+        events = session.scalars(select(Event).where(condition)).all()
+        for event in events:
             session.delete(event)
+    # The records go first: a picture that can't be deleted, open in another program, only leaves a file behind.
+    for event in events:
+        if event.snapshot:
+            for path in (data_dir / event.snapshot, data_dir / face_path(event.snapshot)):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    log.warning("could not delete %s", path)
     snapshots = data_dir / "snapshots"
     if snapshots.exists():
         for day in snapshots.iterdir():
             if day.is_dir() and not any(day.iterdir()):
-                day.rmdir()
-    return len(old)
+                with suppress(OSError):  # a picture taken just now
+                    day.rmdir()
+    return len(events)

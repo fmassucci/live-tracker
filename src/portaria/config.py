@@ -63,7 +63,7 @@ class PreviewConfig:
 
 @dataclass
 class WebConfig:
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"  # every network this computer is on, so phones and the door tablet can open it
     port: int = 8000
     language: str = "pt"  # default for new sessions, the door screen and the video labels
 

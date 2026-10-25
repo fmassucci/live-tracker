@@ -15,7 +15,7 @@ from portaria.db import Camera, Person, get_setting
 from portaria.faces import BLURRY, TOO_SMALL, TURNED_AWAY
 from portaria.i18n import Translator
 from portaria.pipeline import FROZEN
-from portaria.web.common import ASSET_VERSION, branding, services
+from portaria.web.common import branding, services
 
 router = APIRouter()
 
@@ -34,7 +34,6 @@ def door_screen(request: Request, camera: int, key: str, lang: str = "") -> HTML
     t = Translator(lang or s.cfg.web.language)
     return s.templates.TemplateResponse(request, "kiosk.html", {
         "t": t, "lang": t.language, "brand": branding(s), "camera": camera, "camera_name": name, "key": key,
-        "asset_version": ASSET_VERSION,
     })
 
 

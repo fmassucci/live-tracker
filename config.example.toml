@@ -40,7 +40,7 @@ host = "127.0.0.1"
 port = 8080
 
 [web]
-host = "127.0.0.1"       # "0.0.0.0" to open the UI from other computers and the door tablet
+host = "0.0.0.0"         # other devices on the network can open it; "127.0.0.1" for this computer only
 port = 8000
 language = "pt"          # "pt" or "en": default for new sessions, the door screen and video labels
 

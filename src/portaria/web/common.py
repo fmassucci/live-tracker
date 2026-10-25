@@ -16,8 +16,9 @@ from portaria.db import Camera, Database, get_setting
 from portaria.faces import BLURRY, NO_FACE, SEVERAL_FACES, TOO_SMALL, TURNED_AWAY
 from portaria.i18n import Translator
 from portaria.images import read_image
+from portaria.network import local_ipv4
 from portaria.people import People
-from portaria.users import user_exists
+from portaria.users import is_admin, user_exists
 from portaria.web.vision_client import VisionClient
 
 ASSET_VERSION = "15"  # bump to make browsers reload the stylesheet and scripts
@@ -87,6 +88,15 @@ def require_user(request: Request) -> str:
     raise LoginRequired()
 
 
+def require_admin(request: Request) -> str:
+    """The signed-in user, when they are an administrator."""
+    user = require_user(request)
+    with services(request).db.session() as session:
+        if not is_admin(session, user):
+            raise HTTPException(403)
+    return user
+
+
 def translator(request: Request) -> Translator:
     return Translator(request.session.get("lang") or services(request).cfg.web.language)
 
@@ -131,7 +141,6 @@ def _render(request: Request, template: str, section: str, status_code: int, fla
             "door_mode": s.cfg.door.mode,
             "default_password": request.session.get("default_password", False),
             "hidden_notices": request.session.get("hidden_notices", []),
-            "asset_version": ASSET_VERSION,
             "categories": CATEGORIES,
             "recording_states": RECORDING_STATES,
             **context,
@@ -181,3 +190,22 @@ def image_response(path: Path, width: int | None) -> Response:
 def safe_next(target: str) -> str:
     """Only local paths, so a link can't send people to another site after signing in."""
     return target if target.startswith("/") and not target.startswith("//") else "/"
+
+
+def web_addresses(cfg: Config) -> tuple[str, list[str]]:
+    """The web UI's address on this computer, and the ones phones, tablets and other computers use.
+
+    There are none for other devices when the UI only listens on this computer.
+    """
+    host, port = cfg.web.host, cfg.web.port
+    if host == "0.0.0.0":
+        return f"http://127.0.0.1:{port}", [f"http://{address}:{port}" for address in local_ipv4()]
+    url = f"http://{host}:{port}"
+    local_only = host.startswith("127.") or host == "localhost"
+    return url, [] if local_only else [url]
+
+
+def on_this_computer(request: Request) -> bool:
+    """Whether the browser runs on this computer, opened by its loopback address or one of its network addresses."""
+    host = request.client.host if request.client else ""
+    return host == "::1" or host.startswith("127.") or host in local_ipv4()

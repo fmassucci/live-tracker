@@ -107,5 +107,7 @@ def test_dates_and_numbers_follow_the_language():
     day = date(2026, 10, 23)
     assert i18n.Translator("pt").long_date(day) == "Sexta-feira, 23 de outubro"
     assert i18n.Translator("en").long_date(day) == "Friday, October 23"
+    assert i18n.Translator("pt").short_date(day) == "23/10/2026"
+    assert i18n.Translator("en").short_date(day) == "Oct 23, 2026"
     assert i18n.Translator("pt").number(0.765) == "0,77"
     assert i18n.Translator("en").number(0.765) == "0.77"

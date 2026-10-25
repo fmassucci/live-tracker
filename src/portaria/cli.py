@@ -53,6 +53,7 @@ def _parser() -> argparse.ArgumentParser:
     p = commands.add_parser("create-user", help="create a web UI account")
     p.add_argument("username")
     p.add_argument("--password", help="asked for when omitted")
+    p.add_argument("--admin", action="store_true", help="can add accounts, and download and delete records")
 
     commands.add_parser("import", help="import the first setup's photo folders, events and camera")
 
@@ -147,11 +148,11 @@ def _create_user(cfg: Config, args: argparse.Namespace) -> int:
     db.migrate()
     try:
         with db.session() as session:
-            create_user(session, args.username, password)
+            create_user(session, args.username, password, admin=args.admin)
     except AccountError as e:
         print(e)
         return 1
-    print(f"user {args.username} created")
+    print(f"{'administrator' if args.admin else 'user'} {args.username} created")
     return 0
 
 
