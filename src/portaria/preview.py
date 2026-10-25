@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -24,6 +25,12 @@ log = logging.getLogger(__name__)
 _FRAME_PATH = re.compile(r"^/([\w-]+)\.(jpg|mjpg)$")
 
 
+class _HTTPServer(ThreadingHTTPServer):
+    # HTTPServer sets SO_REUSEADDR, and on Windows that lets a second server bind a port already in use: a
+    # second recognition service would then run beside the first, both recording. Without it, the bind fails.
+    allow_reuse_address = sys.platform != "win32"
+
+
 class PreviewServer:
     def __init__(self, host: str, port: int) -> None:
         self._cond = threading.Condition()
@@ -31,7 +38,7 @@ class PreviewServer:
         self._jpegs: dict[str, tuple[int, bytes]] = {}
         self._status: dict = {}
         self._closing = False
-        self._httpd = ThreadingHTTPServer((host, port), _handler(self))
+        self._httpd = _HTTPServer((host, port), _handler(self))
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, name="preview", daemon=True)
 

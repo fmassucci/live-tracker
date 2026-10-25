@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import getpass
 import logging
 import os
+import socket
 import sys
+import threading
+import time
+import urllib.parse
+import webbrowser
 from pathlib import Path
 
 from portaria.config import RECOGNITION_MODELS, Config, load_config
@@ -48,7 +54,9 @@ def _parser() -> argparse.ArgumentParser:
     p = commands.add_parser("run", help="start the recognition service (all cameras from the database)")
     p.add_argument("--source", help="use only this camera instead of the database's, for tests")
 
-    commands.add_parser("web", help="start the web UI")
+    p = commands.add_parser("web", help="start the web UI")
+    p.add_argument("--open", action="store_true",
+                   help="open it in the default browser once it answers; when it already runs, only open it")
 
     p = commands.add_parser("create-user", help="create a web UI account")
     p.add_argument("username")
@@ -119,8 +127,19 @@ def _probe(cfg: Config, args: argparse.Namespace) -> int:
 
 def _run(cfg: Config, args: argparse.Namespace) -> int:
     from portaria.service import VisionService
+    from portaria.web.vision_client import VisionClient
 
-    VisionService(cfg, source=args.source).run()
+    try:
+        service = VisionService(cfg, source=args.source)
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        if VisionClient(cfg.preview).status() is None:
+            print(f"Port {cfg.preview.port} is in use by another program: set another [preview] port in config.toml.")
+            return 1
+        print(f"The recognition service is already running (port {cfg.preview.port}).")
+        return 0
+    service.run()
     return 0
 
 
@@ -128,10 +147,39 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
     import uvicorn
 
     from portaria.web.app import create_app
+    from portaria.web.common import web_addresses
 
-    print(f"web UI at http://{cfg.web.host}:{cfg.web.port}  (Ctrl+C to stop)")
+    here, others = web_addresses(cfg)
+    if args.open and _answers(here):
+        print(f"web UI already running at {here}")
+        webbrowser.open(here)
+        return 0
+    print(f"web UI at {here}  (Ctrl+C to stop)")
+    if others and others != [here]:
+        print(f"from other devices on the network: {' or '.join(others)}")
+    if args.open:
+        threading.Thread(target=_open_once_answering, args=(here,), name="browser", daemon=True).start()
     uvicorn.run(create_app(cfg), host=cfg.web.host, port=cfg.web.port, log_level="warning")
     return 0
+
+
+def _answers(url: str) -> bool:
+    """Whether something listens at the url's address. The timeout is short because on Windows, a connection
+    to a port nobody listens on takes two seconds to be refused."""
+    address = urllib.parse.urlsplit(url)
+    try:
+        socket.create_connection((address.hostname, address.port), timeout=0.5).close()
+    except OSError:
+        return False
+    return True
+
+
+def _open_once_answering(url: str) -> None:
+    """Opens the default browser at url as soon as the web UI answers. It runs beside the server, so if the
+    server fails to start, the process ends and this with it."""
+    while not _answers(url):
+        time.sleep(0.2)
+    webbrowser.open(url)
 
 
 def _create_user(cfg: Config, args: argparse.Namespace) -> int:

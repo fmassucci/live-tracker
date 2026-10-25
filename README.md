@@ -1,4 +1,4 @@
-# padaria-cameras
+# Live Tracker
 
 Face recognition at the staff entrance, with a web UI in Portuguese and English.
 
@@ -22,12 +22,26 @@ IP camera ──RTSP──► recognition service ──── local port (video
   door screen for a tablet at the entrance. Changes to people or cameras reach the service within a second.
 - **People** is the base registry every module builds on: the door today, others later.
 
-## Setup
+## Install
 
-Python 3.11 or newer.
+On Windows:
+
+1. Install Python 3.13, 64-bit: `winget install Python.Python.3.13`, or the Python install manager from
+   https://www.python.org/downloads/ and then `py install 3.13`. Python 3.11 to 3.14 work too: those are the
+   versions onnxruntime is built for.
+2. Put this folder where it will stay, outside OneDrive, such as `C:\Portaria`: `data\` will hold face photos,
+   which must not be copied to the cloud. With git:
+   `git clone https://github.com/fmassucci/padaria-cameras.git C:\Portaria`.
+3. Double-click `install.bat`. It creates the Python environment in `.venv` with Portaria and its libraries,
+   and `config.toml` from `config.example.toml`. It downloads the face models and puts **Portaria** on the
+   desktop (`Portaria.bat`, which runs `start.bat` from this folder). It needs the internet and takes a few
+   minutes the first time. Run it again after an update, with Portaria closed, or after moving the folder:
+   it keeps `config.toml`, the models and `data\`.
+
+By hand, or on Linux, with the test tools:
 
 ```
-py -3.13 -m venv .venv
+py -3.13 -m venv .venv --prompt live-tracker
 .venv\Scripts\activate            # Linux: source .venv/bin/activate
 pip install -e ".[dev]"
 python -m portaria download-models
@@ -70,14 +84,19 @@ second suit it. Its sensitivity levels have their own thresholds (`dfine.py`), s
 
 ## Run
 
-In two terminals:
+Double-click **Portaria** on the desktop, or `start.bat` in this folder. The recognition service starts in a
+minimized window and the web UI in the window that opens. Once the web UI answers, the default browser opens
+it. Whatever already runs is left as it is, so double-clicking again only opens the browser. Closing the web
+UI's window stops only the web UI: the service keeps recording until its own window is closed too.
+
+By hand, in two terminals:
 
 ```
 python -m portaria run
 python -m portaria web
 ```
 
-Open http://127.0.0.1:8000 and sign in with user `admin`, password `admin`. That account is created on the
+Sign in at http://127.0.0.1:8000 with user `admin`, password `admin`. That account is created on the
 first start; every page reminds you to change its password (Settings, Accounts) until you do. More accounts
 can be added in Settings, or with `python -m portaria create-user <name>`. Only administrators add accounts,
 edit the others (administrator or not, a new password) or remove them, and see Settings, Database. `admin` is
@@ -111,9 +130,9 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
 
 | Command | Does |
 |---|---|
-| `run [--source URL]` | recognition service; `--source` uses only that camera, for tests |
-| `web` | web UI |
-| `create-user NAME` | adds a web UI account |
+| `run [--source URL]` | recognition service; `--source` uses only that camera, for tests; stops if one already runs |
+| `web [--open]` | web UI; `--open` opens it in the browser once it answers, or only opens it if it already runs |
+| `create-user NAME [--admin]` | adds a web UI account; `--admin` makes it an administrator |
 | `discover --user admin` | finds ONVIF cameras and lists their RTSP addresses |
 | `probe --source URL` | opens a stream, prints resolution, codec and frame rate, saves one frame |
 | `import` | one-time import of the first setup's files: `data/enroll/<name>/` photos, events, `[camera] source` |

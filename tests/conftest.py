@@ -60,11 +60,11 @@ def cfg(tmp_path) -> Config:
     config = Config()
     config.paths.data_dir = tmp_path / "data"
     config.paths.models_dir = tmp_path / "models"
-    config.preview.port = _free_port()  # never a recognition service running on this machine
+    config.preview.port = free_port()  # never a recognition service running on this machine
     return config
 
 
-def _free_port() -> int:
+def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         return probe.getsockname()[1]

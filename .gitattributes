@@ -1,0 +1,2 @@
+# cmd misreads batch files with Unix line endings: check them out with CRLF everywhere, ZIP downloads included.
+*.bat text eol=crlf
