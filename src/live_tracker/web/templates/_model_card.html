@@ -1,47 +1,50 @@
 {# One model in Settings, AI models. While it downloads, the card refreshes itself every second. #}
-{% from "_macros.html" import icon, toast %}
+{% from "_macros.html" import icon, model_icon, toast %}
 {% set m = card.model %}
 <article class="panel model-card" id="model-{{ m.key }}" aria-labelledby="model-{{ m.key }}-name"
   {% if card.state == "downloading" %}hx-get="/settings/models/{{ m.key }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
-  <div class="model-head">
-    <h2 id="model-{{ m.key }}-name">{{ t(m.name) }}</h2>
-    <span class="state model-state-{{ card.state }}">
-      {%- if card.state == "downloading" %}{{ t("Downloading {percent}%", percent=card.percent) }}{% else %}{{ t(states[card.state]) }}{% endif -%}
-    </span>
+  {{ model_icon(m.key, card.state, locking=card.toast == "ok") }}
+  <div class="model-body">
+    <div class="model-head">
+      <h2 id="model-{{ m.key }}-name">{{ t(m.name) }}</h2>
+      <span class="state model-state-{{ card.state }}">
+        {%- if card.state == "downloading" %}{{ t("Downloading {percent}%", percent=card.percent) }}{% else %}{{ t(states[card.state]) }}{% endif -%}
+      </span>
+    </div>
+    <p class="model-description">{{ t(m.description) }}</p>
+    {% if card.files %}
+    <ul class="model-files">
+      {% for f, file_state in card.files %}
+      <li>
+        <code>{{ f.filename }}</code>
+        <span>{{ t.number(f.size / 1000000, 1 if f.size < 10000000 else 0) }} MB</span>
+        <span>{{ f.license }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="model-meta">
+      {% if m.source %}<span>{{ t("From {source}", source=m.source) }}</span>{% endif %}
+      {% if card.state == "ready" and not m.on_cameras and not m.part_of %}<span>{{ t("Cameras can use it soon.") }}</span>{% endif %}
+    </p>
+    {% endif %}
+    {% if card.state == "downloading" %}
+    <progress max="100" value="{{ card.percent }}" aria-labelledby="model-{{ m.key }}-name">{{ card.percent }}%</progress>
+    {% elif card.state == "failed" %}
+    <p class="model-problem">{{ t("The download didn't finish. Check the internet connection and try again.") }}</p>
+    {% elif card.state == "damaged" %}
+    <p class="model-problem">{{ t("A file doesn't match the published one, maybe an interrupted download. Download it again.") }}</p>
+    {% endif %}
+    {% if card.state in ("missing", "failed", "damaged") %}
+    <form class="actions" method="post" action="/settings/models/{{ m.key }}/download"
+          hx-post="/settings/models/{{ m.key }}/download" hx-target="#model-{{ m.key }}" hx-swap="outerHTML">
+      <button class="button">{{ icon("download") }}{{ t("Download again") if card.state == "damaged" else t("Try again") if card.state == "failed" else t("Download") }}</button>
+    </form>
+    {% elif card.state == "ready" and card.removable %}{# a camera still using it is named when someone tries #}
+    <form class="actions" method="post" action="/settings/models/{{ m.key }}/remove">
+      <button class="button button-quiet">{{ icon("trash") }}{{ t("Remove") }}</button>
+    </form>
+    {% endif %}
   </div>
-  <p class="model-description">{{ t(m.description) }}</p>
-  {% if card.files %}
-  <ul class="model-files">
-    {% for f, file_state in card.files %}
-    <li>
-      <code>{{ f.filename }}</code>
-      <span>{{ t.number(f.size / 1000000, 1 if f.size < 10000000 else 0) }} MB</span>
-      <span>{{ f.license }}</span>
-    </li>
-    {% endfor %}
-  </ul>
-  <p class="model-meta">
-    {% if m.source %}<span>{{ t("From {source}", source=m.source) }}</span>{% endif %}
-    {% if card.state == "ready" and not m.on_cameras and not m.part_of %}<span>{{ t("Cameras can use it soon.") }}</span>{% endif %}
-  </p>
-  {% endif %}
-  {% if card.state == "downloading" %}
-  <progress max="100" value="{{ card.percent }}" aria-labelledby="model-{{ m.key }}-name">{{ card.percent }}%</progress>
-  {% elif card.state == "failed" %}
-  <p class="model-problem">{{ t("The download didn't finish. Check the internet connection and try again.") }}</p>
-  {% elif card.state == "damaged" %}
-  <p class="model-problem">{{ t("A file doesn't match the published one, maybe an interrupted download. Download it again.") }}</p>
-  {% endif %}
-  {% if card.state in ("missing", "failed", "damaged") %}
-  <form class="actions" method="post" action="/settings/models/{{ m.key }}/download"
-        hx-post="/settings/models/{{ m.key }}/download" hx-target="#model-{{ m.key }}" hx-swap="outerHTML">
-    <button class="button">{{ icon("download") }}{{ t("Download again") if card.state == "damaged" else t("Try again") if card.state == "failed" else t("Download") }}</button>
-  </form>
-  {% elif card.state == "ready" and card.removable %}{# a camera still using it is named when someone tries #}
-  <form class="actions" method="post" action="/settings/models/{{ m.key }}/remove">
-    <button class="button button-quiet">{{ icon("trash") }}{{ t("Remove") }}</button>
-  </form>
-  {% endif %}
 </article>
 {% if card.toast %}
 <div hx-swap-oob="beforeend:#toasts">

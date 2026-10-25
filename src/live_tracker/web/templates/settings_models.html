@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import model_icon %}
 {% from "_settings.html" import settings_tabs %}
 {% block title %}{{ t("AI models") }}{% endblock %}
 {% block content %}
@@ -33,7 +34,7 @@
   <h2 id="planned-title">{{ t("Coming soon") }}</h2>
   <ul>
     {% for card in planned %}
-    <li><strong>{{ t(card.model.name) }}</strong><span>{{ t(card.model.description) }}</span></li>
+    <li>{{ model_icon(card.model.key, card.state) }}<strong>{{ t(card.model.name) }}</strong><span>{{ t(card.model.description) }}</span></li>
     {% endfor %}
   </ul>
 </section>

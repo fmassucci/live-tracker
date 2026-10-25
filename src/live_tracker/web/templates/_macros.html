@@ -16,6 +16,16 @@
 </div>
 {%- endmacro %}
 
+{# An AI model's icon (Settings, AI models): what it looks for, inside the same marks. They are orange once the model
+   is ready, and gray until then; `locking` closes them in once, as on the sign-in page, when its download has just
+   finished. #}
+{% macro model_icon(key, state, locking=False) -%}
+<span class="model-icon{% if locking %} is-locking{% endif %}" data-state="{{ state }}">
+  <svg class="model-marks" width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><path d="M2 11.5V2h9.5M28.5 2H38v9.5M38 28.5V38h-9.5M11.5 38H2v-9.5"/></svg>
+  {{- icon("model-" ~ key) -}}
+</span>
+{%- endmacro %}
+
 {% macro avatar(photo_id, name, extra="") -%}
 {% if photo_id %}<img class="avatar {{ extra }}" src="/photos/{{ photo_id }}/face.jpg?w=144" alt="" loading="lazy">
 {%- else %}<span class="avatar avatar-empty {{ extra }}" aria-hidden="true">{{ name[:1] }}</span>{% endif %}

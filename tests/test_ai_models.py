@@ -5,14 +5,17 @@ import threading
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 from conftest import FakeTools, place_model_file, publish_model_file
 from fastapi.testclient import TestClient
 
 from live_tracker.db import Camera, Event
-from live_tracker.models import Downloads, file_state, model_state
+from live_tracker.models import CATALOG, Downloads, file_state, model_state
 from live_tracker.web.app import create_app
+
+ICONS = Path(__file__).parents[1] / "src" / "live_tracker" / "web" / "static" / "icons.svg"
 
 
 class NoVision:
@@ -110,6 +113,19 @@ def test_settings_lists_every_model_and_whether_it_is_downloaded(client):
     assert "Modelos de IA" in page and "Reconhecimento facial" in page and "Pessoas e objetos" in page
     assert "Não baixado" in page  # the test's models folder is empty
     assert "Em breve" in page  # plates and fire are planned
+
+
+def test_every_model_has_an_icon_marked_ready_once_downloaded(client, cfg, monkeypatch):
+    """What the model looks for, inside the corners the camera marks with: orange once it's ready (style.css)."""
+    sprite = ICONS.read_text(encoding="utf-8")
+    assert all(f'<symbol id="model-{model.key}"' in sprite for model in CATALOG)
+    place_model_file(cfg.paths.models_dir, monkeypatch, "yolox")
+    page = client.get("/settings/models").text
+    icons = re.findall(r'<span class="model-icon" data-state="(\w+)">.*?#model-(\w+)"></use>', page, re.S)
+    assert {key: state for state, key in icons} == {
+        "faces": "missing", "liveness": "missing", "objects": "ready", "dfine_m": "missing", "fire": "missing",
+        "falls": "missing", "plates": "planned",
+    }
 
 
 def test_a_camera_can_only_choose_a_downloaded_model(client, cfg, monkeypatch):

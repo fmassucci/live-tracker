@@ -22,7 +22,7 @@ from live_tracker.people import People
 from live_tracker.users import is_admin, user_exists
 from live_tracker.web.vision_client import VisionClient
 
-ASSET_VERSION = "38"  # bump to make browsers reload the stylesheet, scripts and icons
+ASSET_VERSION = "39"  # bump to make browsers reload the stylesheet, scripts and icons
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
