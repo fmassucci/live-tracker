@@ -2,15 +2,19 @@ import socket
 import time
 import webbrowser
 from collections.abc import Callable
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 import uvicorn
 from conftest import free_port
 
+from portaria import cli
 from portaria.cli import main
 from portaria.preview import PreviewServer
 from portaria.service import VisionService
+from portaria.web.vision_client import VisionClient
 
 
 def _config_file(tmp_path, cfg, web_port: int) -> str:
@@ -73,6 +77,62 @@ def test_a_web_ui_already_running_is_only_opened(tmp_path, cfg, monkeypatch):
         port = running.getsockname()[1]
         assert main(["--config", _config_file(tmp_path, cfg, port), "web", "--open"]) == 0
     assert opened == [f"http://127.0.0.1:{port}"]
+
+
+class Launches:
+    """The programs `start` launches in the background: each answers once launched, or ends at once if it fails."""
+
+    def __init__(self, running: set[str], failing: set[str]) -> None:
+        self.started: list[str] = []
+        self.running, self.failing = running, failing
+
+    def background(self, args, command: str, logs: Path) -> tuple[SimpleNamespace, Path]:
+        self.started.append(command)
+        log = logs / f"{command}.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if command in self.failing:
+            log.write_text("Port 8000 is in use by another program\n", encoding="utf-8")
+            return SimpleNamespace(poll=lambda: 1), log
+        self.running.add(command)
+        return SimpleNamespace(poll=lambda: None), log
+
+
+@pytest.fixture
+def launches(monkeypatch):
+    def install(running: set[str] = frozenset(), failing: set[str] = frozenset()) -> Launches:
+        fake = Launches(set(running), set(failing))
+        monkeypatch.setattr(cli, "_background", fake.background)
+        monkeypatch.setattr(cli, "_answers", lambda url: "web" in fake.running)
+        monkeypatch.setattr(VisionClient, "status", lambda self: {} if "run" in fake.running else None)
+        monkeypatch.setattr(cli, "CLOSE_AFTER_S", 0)
+        return fake
+
+    return install
+
+
+def test_start_launches_both_in_the_background_and_opens_the_browser(tmp_path, cfg, monkeypatch, launches):
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    fake = launches()
+    port = free_port()
+    assert main(["--config", _config_file(tmp_path, cfg, port), "start"]) == 0
+    assert fake.started == ["run", "web"]
+    assert opened == [f"http://127.0.0.1:{port}"]
+
+
+def test_start_only_launches_what_is_not_running(tmp_path, cfg, monkeypatch, launches):
+    monkeypatch.setattr(webbrowser, "open", lambda url: None)
+    fake = launches(running={"run"})
+    assert main(["--config", _config_file(tmp_path, cfg, free_port()), "start"]) == 0
+    assert fake.started == ["web"]
+
+
+def test_start_shows_why_a_program_did_not_start(tmp_path, cfg, monkeypatch, launches, capsys):
+    monkeypatch.setattr(webbrowser, "open", lambda url: pytest.fail("opened the browser"))
+    launches(failing={"web"})
+    assert main(["--config", _config_file(tmp_path, cfg, free_port()), "start"]) == 1
+    out = capsys.readouterr().out
+    assert "The web UI didn't start" in out and "Port 8000 is in use by another program" in out
 
 
 def test_a_second_recognition_service_does_not_start(tmp_path, cfg, monkeypatch, capsys):

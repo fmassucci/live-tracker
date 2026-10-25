@@ -8,14 +8,19 @@ import getpass
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
 import urllib.parse
 import webbrowser
+from contextlib import suppress
 from pathlib import Path
 
 from portaria.config import RECOGNITION_MODELS, Config, load_config
+
+START_TIMEOUT_S = 90.0  # for `start`: after the computer starts, loading the AI models can take a while
+CLOSE_AFTER_S = 5.0  # how long `start` still shows that the system runs, before its window closes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +62,9 @@ def _parser() -> argparse.ArgumentParser:
     p = commands.add_parser("web", help="start the web UI")
     p.add_argument("--open", action="store_true",
                    help="open it in the default browser once it answers; when it already runs, only open it")
+
+    commands.add_parser("start", help="start the recognition service and the web UI in the background, without "
+                        "windows, and open the browser; Stop the system, in Settings, stops them")
 
     p = commands.add_parser("create-user", help="create a web UI account")
     p.add_argument("username")
@@ -154,7 +162,7 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
         print(f"web UI already running at {here}")
         webbrowser.open(here)
         return 0
-    print(f"web UI at {here}  (Ctrl+C to stop)")
+    print(f"web UI at {here}" + ("  (Ctrl+C to stop)" if sys.stdout.isatty() else ""))  # not when started by start
     if others and others != [here]:
         print(f"from other devices on the network: {' or '.join(others)}")
     if args.open:
@@ -173,6 +181,64 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
     except KeyboardInterrupt:  # Ctrl+C: uvicorn stops, then raises it again
         pass
     return 0 if server.started else 1
+
+
+def _start(cfg: Config, args: argparse.Namespace) -> int:
+    """What the desktop shortcut runs: starts whichever of the recognition service and the web UI isn't running yet,
+    each in the background without a window, and opens the browser once both answer. Their messages go to
+    data/logs/. When one doesn't start, says why and returns 1, so start.bat keeps the window open."""
+    from portaria.web.common import web_addresses
+    from portaria.web.vision_client import VisionClient
+
+    here, _ = web_addresses(cfg)
+    vision = VisionClient(cfg.preview)
+    logs = cfg.paths.data_dir / "logs"
+    answering = {"run": lambda: vision.status() is not None, "web": lambda: _answers(here)}
+    names = {"run": "recognition service", "web": "web UI"}
+    starting = {}
+    for command, answers in answering.items():
+        if not answers():
+            print(f"Starting the {names[command]}...")
+            starting[command] = _background(args, command, logs)
+    deadline = time.monotonic() + START_TIMEOUT_S
+    while starting:
+        for command, (process, log) in list(starting.items()):
+            if answering[command]():
+                del starting[command]
+            elif process.poll() is not None or time.monotonic() > deadline:
+                print(f"The {names[command]} didn't start. Its last messages, from {log}:\n{_tail(log)}")
+                return 1
+        if starting:
+            time.sleep(0.5)
+    webbrowser.open(here)
+    print(f"Running at {here}. This window closes by itself; to stop the system, use Stop the system in Settings.")
+    time.sleep(CLOSE_AFTER_S)
+    return 0
+
+
+def _background(args: argparse.Namespace, command: str, logs: Path) -> tuple[subprocess.Popen, Path]:
+    """`python -m portaria <command>` without a window, outliving this process. Its messages go to
+    <logs>/<command>.log; the previous start's are kept in <command>.previous.log."""
+    logs.mkdir(parents=True, exist_ok=True)
+    log = logs / f"{command}.log"
+    with suppress(OSError):
+        log.replace(logs / f"{command}.previous.log")
+    flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+    with open(log, "wb") as output:
+        process = subprocess.Popen(
+            [sys.executable, "-u", "-m", "portaria", "--config", str(args.config.resolve()),
+             *(["--verbose"] if args.verbose else []), command],
+            stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, creationflags=flags,
+            start_new_session=sys.platform != "win32", env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+    return process, log
+
+
+def _tail(path: Path, lines: int = 20) -> str:
+    try:
+        return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
+    except OSError:
+        return "(no messages)"
 
 
 def _answers(url: str) -> bool:
@@ -243,6 +309,7 @@ _COMMANDS = {
     "probe": _probe,
     "run": _run,
     "web": _web,
+    "start": _start,
     "create-user": _create_user,
     "import": _import,
     "evaluate": _evaluate,

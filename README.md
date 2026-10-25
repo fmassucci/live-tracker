@@ -84,10 +84,12 @@ second suit it. Its sensitivity levels have their own thresholds (`dfine.py`), s
 
 ## Run
 
-Double-click **Portaria** on the desktop, or `start.bat` in this folder. The recognition service starts in a
-minimized window and the web UI in the window that opens. Once the web UI answers, the default browser opens
-it. Whatever already runs is left as it is, so double-clicking again only opens the browser. Closing the web
-UI's window stops only the web UI: the service keeps recording until its own window is closed too.
+Double-click **Portaria** on the desktop, or `start.bat` in this folder (`python -m portaria start`). A window
+shows the recognition service and the web UI starting, both in the background without windows of their own.
+Once they answer, the default browser opens the system and the window closes by itself. If one of them doesn't
+start, the window stays open with its last messages. Whatever already runs is left as it is, so double-clicking
+again only opens the browser. Their messages go to `data\logs\run.log` and `data\logs\web.log`; the previous
+start's are kept beside them as `run.previous.log` and `web.previous.log`.
 
 To stop both, use **Stop the system** in Settings (System). Only administrators see it, and only in a browser
 on the computer that runs the system, since that's the only place to start it again.
@@ -135,6 +137,7 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
 |---|---|
 | `run [--source URL]` | recognition service; `--source` uses only that camera, for tests; stops if one already runs |
 | `web [--open]` | web UI; `--open` opens it in the browser once it answers, or only opens it if it already runs |
+| `start` | what start.bat runs: both of the above in the background, without windows, then opens the browser |
 | `create-user NAME [--admin]` | adds a web UI account; `--admin` makes it an administrator |
 | `discover --user admin` | finds ONVIF cameras and lists their RTSP addresses |
 | `probe --source URL` | opens a stream, prints resolution, codec and frame rate, saves one frame |
@@ -159,6 +162,7 @@ data/portaria.db         people, photos, face data, cameras, records, accounts, 
 data/photos/<id>/        face photos
 data/snapshots/<day>/    one picture per decision (and a face crop), deleted after [storage] retention_days
 data/branding/logo.png   the logo set in Settings
+data/logs/               the messages of the recognition service and the web UI started by start.bat
 ```
 
 Settings, Database (administrators only):
