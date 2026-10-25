@@ -32,6 +32,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # Settings rows bumped whenever something the recognition service has loaded changes.
 FACES_VERSION = "faces_version"
 CAMERAS_VERSION = "cameras_version"
+MODELS_VERSION = "models_version"  # a model was downloaded or removed
 
 
 class Base(DeclarativeBase):
@@ -50,6 +51,12 @@ class Camera(Base):
     device: Mapped[str] = mapped_column(String(10), default="", server_default="")
     # "": the whole picture. "top" or "bottom": one lens of a two-lens camera that sends both in one picture.
     part: Mapped[str] = mapped_column(String(10), default="", server_default="")
+    # The analysis's own settings, as JSON: for "objects", the kinds of things to record (objects.ObjectSettings).
+    model_settings: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    # When to keep a photo of what the model finds (recording.RecordRule): "appear", each time it appears;
+    # "interval", at most once every record_every_s, and again while it stays; "daily", the first time each day.
+    record_mode: Mapped[str] = mapped_column(String(10), default="appear", server_default="appear")
+    record_every_s: Mapped[int] = mapped_column(Integer, default=900, server_default="900")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -107,7 +114,10 @@ class Event(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     at: Mapped[datetime] = mapped_column(DateTime, index=True)
-    kind: Mapped[str] = mapped_column(String(12), index=True)  # "recognized", "unknown" or "spoof"
+    kind: Mapped[str] = mapped_column(String(12), index=True)  # "recognized", "unknown", "spoof" or "detected"
+    # "detected": the kind of thing the people-and-objects model saw (objects.THINGS), and how many at once.
+    label: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="SET NULL"))
     person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), index=True)
     person_name: Mapped[str | None] = mapped_column(String(120))  # kept even if the person is deleted

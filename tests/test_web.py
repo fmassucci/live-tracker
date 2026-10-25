@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 import pytest
-from conftest import FakeTools
+from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -289,14 +289,18 @@ def test_deleting_records_needs_the_confirmation_and_keeps_the_other_days(app, c
 
 
 def test_recording_state_says_why_a_camera_is_not_recording():
-    camera = SimpleNamespace(enabled=True)
+    camera = SimpleNamespace(enabled=True, analysis="faces")
     assert recording_state(camera, {"online": True}, service_up=True) == "recording"
     assert recording_state(camera, {"online": False}, service_up=True) == "no-image"
     assert recording_state(camera, None, service_up=False) == "service-down"
     assert recording_state(SimpleNamespace(enabled=False), {"online": True}, service_up=True) == "stopped"
+    assert recording_state(camera, {"online": True, "model_missing": True}, service_up=True) == "no-model"
+    assert recording_state(SimpleNamespace(enabled=True, analysis=""), {"online": True}, service_up=True) == "live"
 
 
-def test_a_camera_has_an_ai_model_and_an_attached_device(client, app):
+def test_a_camera_has_an_ai_model_and_an_attached_device(client, app, cfg, monkeypatch):
+    for key in ("yunet", "auraface"):  # face recognition is offered once downloaded
+        place_model_file(cfg.paths.models_dir, monkeypatch, key)
     form = client.get("/cameras/new").text
     assert "Modelo de IA" in form and "Reconhecimento facial" in form and "Dispositivo ligado" in form
     client.post("/cameras/new", data={"name": "Cozinha", "url": "0", "analysis": "faces", "device": ""})

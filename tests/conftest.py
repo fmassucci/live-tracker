@@ -1,13 +1,30 @@
+import hashlib
 import socket
 import threading
 
 import numpy as np
 import pytest
 
+from portaria import models
 from portaria.config import Config
 from portaria.db import Database
 from portaria.faces import ARCFACE_TEMPLATE, Face
+from portaria.models import ModelFile
 from portaria.people import People
+
+
+def publish_model_file(monkeypatch, key: str, content: bytes, url: str = "http://example.invalid/model.onnx") -> None:
+    """Pretend a model file with this content is published at url."""
+    model_file = ModelFile(f"{key}.onnx", url, hashlib.sha256(content).hexdigest(), "MIT", len(content))
+    monkeypatch.setitem(models.FILES, key, model_file)
+
+
+def place_model_file(models_dir, monkeypatch, key: str) -> None:
+    """Pretend a model file is already downloaded, so the app offers that model."""
+    content = f"weights of {key}".encode()
+    publish_model_file(monkeypatch, key, content)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / f"{key}.onnx").write_bytes(content)
 
 
 class FakeDetector:

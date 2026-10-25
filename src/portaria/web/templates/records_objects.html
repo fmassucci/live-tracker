@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% from "_records.html" import records_tabs %}
+{% block title %}{{ t("Records") }}{% endblock %}
+{% block content %}
+{% set here = "/records?view=objects&day=" ~ day.isoformat() %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Records") }}</h1>
+    <p>{{ t("What the cameras with People and objects, Fire and smoke or Falls found: one record per stay, with the picture of that moment. Records are kept for {days} days.", days=retention) }}</p>
+  </div>
+</div>
+{{ records_tabs("objects", day, tab_counts, t) }}
+
+<form class="filters" method="get" action="/records">
+  <input type="hidden" name="view" value="objects">
+  {% if thing %}<input type="hidden" name="thing" value="{{ thing }}">{% endif %}
+  <div class="field">
+    <label for="day">{{ t("Day") }}</label>
+    <input type="date" id="day" name="day" value="{{ day.isoformat() }}">
+  </div>
+  <div class="field">
+    <label for="camera">{{ t("Camera") }}</label>
+    <select id="camera" name="camera">
+      <option value="">{{ t("All cameras") }}</option>
+      {% for c in cameras %}<option value="{{ c.id }}" {% if camera == c.id | string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <button class="button">{{ t("Show") }}</button>
+  <div class="day-nav">
+    <a class="button button-quiet button-small" href="/records?view=objects&day={{ previous_day.isoformat() }}&camera={{ camera }}&thing={{ thing }}">{{ icon("chevron-left") }}{{ t("Previous day") }}</a>
+    {% if not is_today %}<a class="button button-quiet button-small" href="/records?view=objects&day={{ next_day.isoformat() }}&camera={{ camera }}&thing={{ thing }}">{{ t("Next day") }}{{ icon("chevron-right") }}</a>{% endif %}
+  </div>
+</form>
+
+<h2 class="day-title">{{ t.long_date(day) }}</h2>
+{% if total %}
+<nav class="kind-chips" aria-label="{{ t('What was found') }}">
+  <a href="{{ here }}&camera={{ camera }}" {% if not thing %}aria-current="page"{% endif %}>{{ t("Everything") }}<span>{{ total }}</span></a>
+  {% for label, count in counts %}
+  <a href="{{ here }}&camera={{ camera }}&thing={{ label }}" {% if thing == label %}aria-current="page"{% endif %}>{{ t(things.get(label, label)) }}<span>{{ count }}</span></a>
+  {% endfor %}
+</nav>
+<div class="findings">
+  {% for hour, items in hours %}
+  <section class="finding-hour" aria-labelledby="hour-{{ hour }}">
+    <h3 id="hour-{{ hour }}">{{ t("{hour}:00", hour="%02d" | format(hour)) }}</h3>
+    <ul class="finding-sheet">
+      {% for e in items %}
+      {% set what = t(things.get(e.label, e.label)) %}
+      <li class="finding">
+        <a class="finding-photo" href="/records/{{ e.id }}.jpg" target="_blank" rel="noopener" title="{{ t('Open the whole picture') }}">
+          <img src="/records/{{ e.id }}/face.jpg?w=480" alt="{{ t('{thing} at {time}', thing=what, time=e.at.strftime('%H:%M')) }}" loading="lazy">
+        </a>
+        <p class="finding-what">
+          <strong>{{ what }}</strong>{% if e.count > 1 %}<span class="finding-count">&times;{{ e.count }}</span>{% endif %}
+          <time datetime="{{ e.at.isoformat() }}">{{ e.at.strftime("%H:%M") }}</time>
+        </p>
+        <p class="finding-where">
+          <span>{{ camera_names.get(e.camera_id, t("Removed camera")) }}</span>
+          <span title="{{ t('How sure the model was') }}">{{ t.number(e.score * 100, 0) }}%</span>
+        </p>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <p>{{ t("Nothing found on this day.") }}</p>
+  <p class="small">{{ t("Cameras running People and objects, Fire and smoke or Falls show here what they find. Choose what each camera looks for in its settings.") }} <a href="/cameras">{{ t("Cameras") }}</a></p>
+</div>
+{% endif %}
+{% endblock %}

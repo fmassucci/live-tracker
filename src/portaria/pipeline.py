@@ -6,6 +6,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from portaria.camera import Frame
 from portaria.config import Config
@@ -16,17 +17,24 @@ from portaria.faces import Face, FaceDetector, align, assess
 from portaria.gallery import Gallery
 from portaria.liveness import LivenessCheck
 
+if TYPE_CHECKING:  # objects.py builds on this module
+    from portaria.objects import Sighting
+
 FROZEN = "frozen frame"
 FROZEN_AFTER_S = 1.0  # the same picture for this long means the stream froze
+SPOOFED = "Photo or screen suspected"  # a face the liveness check rejected; the records' name for it too
 
 
 @dataclass
 class Result:
+    """What a camera's analysis made of one frame: face recognition, or people and objects (objects.py)."""
+
     state: str = "idle"  # "idle" (nobody), "adjust" (face not usable yet), "checking" (recognizing)
     problem: str = ""    # why the face isn't usable, while adjusting
     overlays: list[Overlay] = field(default_factory=list)
     face: Face | None = None
     decision: Decision | None = None
+    sightings: list[Sighting] = field(default_factory=list)  # kinds of things that stayed long enough to record
 
 
 class Recognizer:
@@ -44,7 +52,7 @@ class Recognizer:
         self._cfg = cfg
         self._detector = detector
         self._embedder = embedder
-        self._liveness = liveness
+        self.liveness = liveness  # replaced by the service when the liveness model is downloaded or removed
         self._translate = translate
         self.gallery = gallery  # replaced by the service when people change
         self.decider = DecisionMaker(cfg.decision, cfg.recognition.accept_threshold, cfg.recognition.min_margin)
@@ -70,13 +78,15 @@ class Recognizer:
             person=match.person if match else None,
             score=match.score if match else -1.0,
             margin=match.margin if match else 0.0,
-            live=self._liveness.is_live(frame.image, face),
+            live=self.liveness.is_live(frame.image, face),
         )
         accepted = self.decider.matches(observation) and observation.live
         if not match:
             label = ""
         elif accepted:
             label = f"{self.gallery.name(match.person)} {match.score:.2f}"
+        elif self.decider.matches(observation):  # whose photo it seems to be
+            label = f"{self._translate(SPOOFED)}: {self.gallery.name(match.person)}"
         else:  # closest person, for tuning; the "?" keeps it from reading as an identification
             label = f"? {self.gallery.name(match.person)} {match.score:.2f}"
         result.overlays.append(Overlay(face, label, "ok" if accepted else "bad"))

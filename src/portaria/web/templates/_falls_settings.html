@@ -1,0 +1,26 @@
+{# Falls: its settings hang from its option in the camera form, shown only while it is chosen. #}
+<div class="model-settings model-settings-falls">
+  <p class="part-note">{{ t("Works best from high up, with the floor in view.") }}</p>
+
+  <fieldset class="field">
+    <legend>{{ t("Sensitivity") }}</legend>
+    <div class="segmented">
+      {% for value, label in sensitivity %}
+      <label><input type="radio" name="falls_confidence" value="{{ value }}" {% if falls.level == value %}checked{% endif %}><span>{{ t(label) }}</span></label>
+      {% endfor %}
+    </div>
+    <span class="hint">{{ t("If it records things that aren't there, choose Fewer false alarms. If it misses what matters, choose Finds more.") }}</span>
+  </fieldset>
+
+  <div class="field">
+    <label for="falls_seconds">{{ t("Minimum time on the floor") }}</label>
+    <span class="with-unit"><input type="number" id="falls_seconds" name="falls_seconds" min="0" max="600" step="1" value="{{ falls.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+    <span class="hint">{{ t("Someone bending down to pick something up is back on their feet within seconds; someone who fell stays down.") }}</span>
+  </div>
+
+  <div class="field">
+    <label for="falls_fps">{{ t("Analyses per second") }}</label>
+    <input type="number" id="falls_fps" name="falls_fps" min="1" max="10" step="1" value="{{ falls.fps | int }}">
+    <span class="hint">{{ t("More analyses notice sooner, and use more of the processor.") }}</span>
+  </div>
+</div>

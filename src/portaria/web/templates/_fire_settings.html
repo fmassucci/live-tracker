@@ -1,0 +1,36 @@
+{# Fire and smoke: its settings hang from its option in the camera form, shown only while it is chosen.
+   Its kinds share the form's "kinds" with people and objects; the other fields have their own names. #}
+<div class="model-settings model-settings-fire">
+  <p class="part-note">{{ t("Only in addition to the smoke detectors, never instead: ovens, steam and flour dust can look like fire or smoke. Try it with the ovens on.") }}</p>
+
+  <fieldset class="field">
+    <legend>{{ t("What to look for") }}</legend>
+    <div class="choices">
+      {% for key, label in fire_things.items() %}
+      <label class="choice"><input type="checkbox" name="kinds" value="{{ key }}" {% if key in fire.kinds %}checked{% endif %}>{{ t(label) }}</label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>{{ t("Sensitivity") }}</legend>
+    <div class="segmented">
+      {% for value, label in sensitivity %}
+      <label><input type="radio" name="fire_confidence" value="{{ value }}" {% if fire.level == value %}checked{% endif %}><span>{{ t(label) }}</span></label>
+      {% endfor %}
+    </div>
+    <span class="hint">{{ t("If it records things that aren't there, choose Fewer false alarms. If it misses what matters, choose Finds more.") }}</span>
+  </fieldset>
+
+  <div class="field">
+    <label for="fire_seconds">{{ t("Minimum time in the picture") }}</label>
+    <span class="with-unit"><input type="number" id="fire_seconds" name="fire_seconds" min="0" max="600" step="1" value="{{ fire.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+    <span class="hint">{{ t("Only counts fire or smoke that stays at least this long, so a flame or a puff of steam passing by isn't recorded.") }}</span>
+  </div>
+
+  <div class="field">
+    <label for="fire_fps">{{ t("Analyses per second") }}</label>
+    <input type="number" id="fire_fps" name="fire_fps" min="1" max="10" step="1" value="{{ fire.fps | int }}">
+    <span class="hint">{{ t("More analyses notice sooner, and use more of the processor.") }}</span>
+  </div>
+</div>

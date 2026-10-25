@@ -23,14 +23,14 @@
 <span class="camera-state camera-state-{{ state }} {{ extra }}"{% if camera_id %} data-recording-for="{{ camera_id }}" data-state="{{ state }}"{% endif %}><span class="camera-dot"></span><span>{{ label }}</span></span>
 {%- endmacro %}
 
-{# Start or stop a camera, then come back to `next`. Every camera records, so the buttons say so. #}
+{# Start or stop a camera, then come back to `next`. A camera with an AI model records, so its buttons say so. #}
 {% macro switch_button(camera, next, t, extra="") -%}
 <form method="post" action="/cameras/{{ camera.id }}/{{ 'stop' if camera.enabled else 'start' }}">
   <input type="hidden" name="next" value="{{ next }}">
   {% if camera.enabled %}
-  <button class="button button-quiet {{ extra }}">{{ icon("stop") }}{{ t("Stop recording") }}</button>
+  <button class="button button-quiet {{ extra }}">{{ icon("stop") }}{{ t("Stop recording") if camera.analysis else t("Turn off") }}</button>
   {% else %}
-  <button class="button {{ extra }}">{{ icon("record") }}{{ t("Start recording") }}</button>
+  <button class="button {{ extra }}">{{ icon("record") }}{{ t("Start recording") if camera.analysis else t("Turn on") }}</button>
   {% endif %}
 </form>
 {%- endmacro %}

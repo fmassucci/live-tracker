@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_settings.html" import settings_tabs %}
+{% block title %}{{ t("AI models") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ t("Settings") }}</h1></div>
+</div>
+{{ settings_tabs("models", t) }}
+
+<p class="models-intro">
+  {{ t("Download a model once, then choose it in each camera's settings.") }}
+  {{ t("Models run on the GPU.") if gpu else t("Models run on the processor (CPU); the GPU isn't enabled yet.") }}
+</p>
+<div class="models">
+  {% for card in cards if card.state != "planned" %}{% include "_model_card.html" %}{% endfor %}
+</div>
+{% set planned = cards | selectattr("state", "equalto", "planned") | list %}
+{% if planned %}
+<section class="models-planned" aria-labelledby="planned-title">
+  <h2 id="planned-title">{{ t("Coming soon") }}</h2>
+  <ul>
+    {% for card in planned %}
+    <li><strong>{{ t(card.model.name) }}</strong><span>{{ t(card.model.description) }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

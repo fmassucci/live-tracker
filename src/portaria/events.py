@@ -1,6 +1,6 @@
 """Event log: a JPEG snapshot per decision under data/snapshots/, and a row in the events table.
 
-Next to each snapshot (x.jpg) goes a crop of the face (x.face.jpg), used for thumbnails.
+Next to each snapshot (x.jpg) goes a crop of the face, or of the thing seen (x.face.jpg), used for thumbnails.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ import logging
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -17,6 +18,9 @@ from sqlalchemy import ColumnElement, and_, select, true
 from portaria.db import Camera, Database, Event, Person
 from portaria.decision import Decision
 from portaria.images import write_jpeg
+
+if TYPE_CHECKING:
+    from portaria.objects import Sighting
 
 log = logging.getLogger(__name__)
 
@@ -38,29 +42,31 @@ class EventLog:
         model: str,
         liveness: str,
     ) -> int:
+        person_id = int(decision.person) if decision.person and decision.person.isdigit() else None
+        return self._save(decision.kind, snapshot, face, camera_id, person_id=person_id, person_name=person_name,
+                          score=decision.score, door=door, model=model, liveness=liveness)
+
+    def record_sighting(
+        self, sighting: Sighting, snapshot: np.ndarray, *, thumbnail: np.ndarray | None, camera_id: int | None,
+        model: str,
+    ) -> int:
+        """A kind of thing the people-and-objects model saw stay in the picture: no person, no door."""
+        return self._save("detected", snapshot, thumbnail, camera_id, label=sighting.kind, count=sighting.count,
+                          score=sighting.score, door="", model=model, liveness="none")
+
+    def _save(self, kind: str, snapshot: np.ndarray, thumbnail: np.ndarray | None, camera_id: int | None,
+              person_id: int | None = None, **columns: object) -> int:
         now = datetime.now()
-        relative = f"snapshots/{now:%Y-%m-%d}/{now:%H%M%S_%f}_{decision.kind}.jpg"
+        relative = f"snapshots/{now:%Y-%m-%d}/{now:%H%M%S_%f}_{kind}.jpg"
         write_jpeg(self._data_dir / relative, snapshot)
-        if face is not None and face.size:
-            write_jpeg(self._data_dir / face_path(relative), face)
+        if thumbnail is not None and thumbnail.size:
+            write_jpeg(self._data_dir / face_path(relative), thumbnail)
         with self._db.session() as session:
-            person_id = int(decision.person) if decision.person and decision.person.isdigit() else None
             if person_id is not None and session.get(Person, person_id) is None:
                 person_id = None  # deleted while they stood at the door
             if camera_id is not None and session.get(Camera, camera_id) is None:
                 camera_id = None
-            event = Event(
-                at=now,
-                kind=decision.kind,
-                camera_id=camera_id,
-                person_id=person_id,
-                person_name=person_name,
-                score=decision.score,
-                snapshot=relative,
-                door=door,
-                model=model,
-                liveness=liveness,
-            )
+            event = Event(at=now, kind=kind, camera_id=camera_id, person_id=person_id, snapshot=relative, **columns)
             session.add(event)
             session.flush()
             return event.id

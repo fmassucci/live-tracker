@@ -33,7 +33,7 @@
 
   // Recording chips follow their camera while the page is open: a webcam takes a moment to start.
   // When a camera starts sending, its live video reconnects, or the page reloads to show it.
-  const sending = (state) => state === "recording";
+  const sending = (state) => ["recording", "live", "no-model"].includes(state);
   const reconnect = (img) => {
     img.src = `${img.src.split("?")[0]}?t=${Date.now()}`;
   };

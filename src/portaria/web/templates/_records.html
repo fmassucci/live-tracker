@@ -1,0 +1,7 @@
+{# The two views of Records: faces (entries, not recognized), and what the people-and-objects cameras found. #}
+{% macro records_tabs(current, day, counts, t) -%}
+<nav class="tabs" aria-label="{{ t('Records') }}">
+  <a href="/records?day={{ day.isoformat() }}" {% if current == "faces" %}aria-current="page"{% endif %}>{{ t("Faces") }}<span class="tab-count">{{ counts.faces }}</span></a>
+  <a href="/records?view=objects&day={{ day.isoformat() }}" {% if current == "objects" %}aria-current="page"{% endif %}>{{ t("People and objects") }}<span class="tab-count">{{ counts.objects }}</span></a>
+</nav>
+{%- endmacro %}

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date, datetime, timedelta
+from itertools import groupby
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,12 +13,16 @@ from sqlalchemy import func, select
 
 from portaria.db import Camera, Event, Person, Photo
 from portaria.events import face_path
+from portaria.falls import NAMES as FALL_NAMES
+from portaria.fire import NAMES as FIRE_NAMES
+from portaria.objects import NAMES as OBJECT_NAMES
 from portaria.web.common import (
     DOOR_RESULTS, KINDS, fragment, image_response, page, recording_state, require_user, services,
 )
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
+NAMES = {**OBJECT_NAMES, **FIRE_NAMES, **FALL_NAMES}  # every kind of thing a camera records, by its key
 REFRESH_S = 5  # Today refreshes this often; an entry this recent gets the stamping animation
 UNRECOGNIZED_SHOWN = 30  # faces not recognized shown on Today, newest first; Records has all of them
 
@@ -31,25 +37,70 @@ def today_live(request: Request) -> HTMLResponse:
     return fragment(request, "_today_live.html", **_today(request))
 
 
+FACE_KINDS = {key: label for key, label in KINDS.items() if key != "detected"}
+
+
 @router.get("/records", response_class=HTMLResponse)
-def records(request: Request, day: str = "", kind: str = "", person: str = "") -> HTMLResponse:
+def records(
+    request: Request, day: str = "", kind: str = "", person: str = "", view: str = "", thing: str = "",
+    camera: str = "",
+) -> HTMLResponse:
+    """Two views of a day: what happened with faces, and what the people-and-objects cameras found."""
     chosen = _parse_day(day)
+    if view == "objects":
+        return _findings(request, chosen, thing, camera)
     with services(request).db.session() as session:
         start = datetime.combine(chosen, datetime.min.time())
-        query = select(Event).where(Event.at >= start, Event.at < start + timedelta(days=1))
-        if kind in KINDS:
+        query = select(Event).where(Event.at >= start, Event.at < start + timedelta(days=1), Event.kind != "detected")
+        if kind in FACE_KINDS:
             query = query.where(Event.kind == kind)
         if person.isdigit():
             query = query.where(Event.person_id == int(person))
         events = session.scalars(query.order_by(Event.at.desc()).limit(500)).all()
         people = session.scalars(select(Person).order_by(Person.name)).all()
         camera_names = {c.id: c.name for c in session.scalars(select(Camera))}
+        tab_counts = _tab_counts(session, start)
     return page(
         request, "records.html", section="records", events=events, people=people, camera_names=camera_names,
-        day=chosen, kind=kind, person=person, kinds=KINDS, door_results=DOOR_RESULTS,
-        retention=services(request).cfg.storage.retention_days,
-        previous_day=chosen - timedelta(days=1), next_day=chosen + timedelta(days=1), is_today=chosen == date.today(),
+        tab_counts=tab_counts,
+        day=chosen, kind=kind, person=person, kinds=FACE_KINDS, door_results=DOOR_RESULTS, things=NAMES,
+        retention=services(request).cfg.storage.retention_days, **_days_around(chosen),
     )
+
+
+def _findings(request: Request, chosen: date, thing: str, camera: str) -> HTMLResponse:
+    """The day's people-and-objects records, newest first, grouped by hour, with a count per kind of thing."""
+    with services(request).db.session() as session:
+        start = datetime.combine(chosen, datetime.min.time())
+        query = select(Event).where(Event.at >= start, Event.at < start + timedelta(days=1), Event.kind == "detected")
+        if camera.isdigit():
+            query = query.where(Event.camera_id == int(camera))
+        found = session.scalars(query.order_by(Event.at.desc()).limit(1000)).all()
+        cameras = session.scalars(select(Camera).order_by(Camera.name)).all()
+        tab_counts = _tab_counts(session, start)
+    counts = Counter(e.label for e in found).most_common()
+    shown = [e for e in found if not thing or e.label == thing]
+    hours = [(hour, list(items)) for hour, items in groupby(shown, key=lambda e: e.at.hour)]
+    return page(
+        request, "records_objects.html", section="records", hours=hours, counts=counts, total=len(found),
+        tab_counts=tab_counts,
+        thing=thing if thing in NAMES else "", camera=camera, cameras=cameras,
+        camera_names={c.id: c.name for c in cameras}, things=NAMES, day=chosen,
+        retention=services(request).cfg.storage.retention_days, **_days_around(chosen),
+    )
+
+
+def _tab_counts(session, start: datetime) -> dict[str, int]:
+    """How many records each view has on the day, shown on its tab."""
+    day = (Event.at >= start, Event.at < start + timedelta(days=1))
+    count = select(func.count()).select_from(Event).where(*day)
+    return {"faces": session.scalar(count.where(Event.kind != "detected")),
+            "objects": session.scalar(count.where(Event.kind == "detected"))}
+
+
+def _days_around(chosen: date) -> dict:
+    return {"previous_day": chosen - timedelta(days=1), "next_day": chosen + timedelta(days=1),
+            "is_today": chosen == date.today()}
 
 
 @router.get("/records/{event_id}.jpg")

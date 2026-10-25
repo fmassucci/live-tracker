@@ -224,29 +224,152 @@ body:has(.toast) .page { padding-bottom: 200px; } /* the end of a page can scrol
 .field { display: grid; gap: 6px; margin: 0 0 18px; border: 0; padding: 0; min-width: 0; }
 .field > label, .field > legend, .field-label { font-weight: 600; font-size: 14px; padding: 0; }
 .hint { color: var(--ink-3); font-size: 13px; }
-input[type="text"], input[type="password"], input[type="date"], input[type="search"], select, textarea {
+input[type="text"], input[type="password"], input[type="date"], input[type="search"], input[type="number"], select, textarea {
   font: inherit; color: var(--ink); background: var(--surface);
   border: 1px solid var(--line-strong); border-radius: var(--radius-control);
   padding: 9px 12px; min-height: 42px; width: 100%;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
-input[type="text"], input[type="password"], input[type="date"], input[type="search"], select { height: 42px; }
+input[type="text"], input[type="password"], input[type="date"], input[type="search"], input[type="number"], select { height: 42px; }
 textarea { min-height: 92px; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px color-mix(in srgb, var(--orange) 24%, transparent);
 }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.field-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+.field-pair > .field { align-content: start; } /* side by side, a field with a hint doesn't push its neighbour's box down */
+.with-unit { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
+.with-unit input, .field > input[type="number"] { width: 104px; }
+/* Three named levels in one control, like the tabs */
+.segmented {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px;
+  border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--canvas);
+}
+.segmented label { position: relative; cursor: pointer; }
+.segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.segmented span {
+  display: grid; place-items: center; min-height: 38px; padding: 6px 10px; border-radius: 8px;
+  color: var(--ink-2); font-size: 14px; font-weight: 550; line-height: 1.25; text-align: center;
+}
+.segmented label:hover span { color: var(--ink); }
+.segmented input:checked + span {
+  background: var(--surface); color: var(--orange-ink); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 18, 24, 0.14), 0 0 0 1px var(--line);
+}
+.segmented input:focus-visible + span { outline: 2px solid var(--orange); outline-offset: 1px; }
 .choice {
   display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; font-weight: 520;
   border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);
 }
 .choice:has(input:checked) { border-color: var(--orange); background: var(--orange-wash); color: var(--orange-ink); }
 .choice input { accent-color: var(--orange-strong); margin: 0; }
+.choice[hidden] { display: none; }
+.choice:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
 .check { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; cursor: pointer; }
 .check input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--orange-strong); }
 .check span { display: grid; gap: 2px; }
 .form-error { padding: 10px 14px; border-radius: var(--radius-control); background: var(--bad-wash); color: var(--bad); margin-bottom: 18px; font-weight: 520; }
 .form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+
+/* Camera settings: the form in parts on the left, the camera's own picture beside it */
+.back-link {
+  display: inline-flex; align-items: center; gap: 2px; margin: 0 0 8px -4px;
+  color: var(--ink-2); font-size: 14px; font-weight: 550; text-decoration: none;
+}
+.back-link:hover { color: var(--ink); }
+.back-link .icon { width: 16px; height: 16px; }
+.camera-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.camera-settings { padding: 0; }
+.settings-part { padding: 24px; border-top: 1px solid var(--line); }
+.settings-part:first-of-type { border-top: 0; }
+.settings-part > h2 { font-size: 18px; }
+.part-note { margin: 4px 0 18px; max-width: 62ch; color: var(--ink-2); font-size: 14px; }
+.settings-part > .field:last-child { margin-bottom: 0; }
+.address-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.address-row input { flex: 1 1 260px; min-width: 0; }
+.lens-notice p { margin: 0 0 14px; }
+.save-bar {
+  position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 24px;
+  background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+}
+.camera-monitor { position: sticky; top: 24px; display: grid; gap: 10px; }
+.camera-monitor .video { width: 100%; }
+.monitor-facts { display: flex; gap: 16px; color: var(--ink-2); font-size: 14px; }
+
+/* AI model: one list of choices. The chosen model's settings hang under it, joined to it by an orange line. */
+.model-options {
+  min-width: 0; margin: 0 0 12px; padding: 0; overflow: hidden;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control);
+}
+.model-option { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; cursor: pointer; }
+.model-option + .model-option, .model-settings + .model-option { border-top: 1px solid var(--line); }
+.model-option:hover { background: var(--surface-2); }
+.model-option input { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--orange-strong); }
+.model-option strong { font-weight: 600; }
+.model-option-hint { display: block; margin-top: 2px; color: var(--ink-2); font-size: 14px; }
+.model-missing { color: var(--caution); font-size: 13px; font-weight: 550; }
+.model-option:has(input:checked) { background: var(--orange-wash); box-shadow: inset 3px 0 0 var(--orange-strong); }
+.model-option:has(input:checked) strong { color: var(--orange-ink); }
+.model-settings { display: none; padding: 4px 22px 24px 44px; box-shadow: inset 3px 0 0 var(--orange-strong); }
+form:has(input[name="analysis"][value="objects"]:checked) .model-settings-objects,
+form:has(input[name="analysis"][value="fire"]:checked) .model-settings-fire,
+form:has(input[name="analysis"][value="falls"]:checked) .model-settings-falls { display: block; }
+.model-settings .field:last-child { margin-bottom: 0; }
+.model-settings > .part-note:first-child { margin-top: 10px; }
+/* The settings read back as one sentence: what gets recorded, and after how long */
+.rule { margin: 14px 0 22px; max-width: 36ch; font-size: 20px; line-height: 1.4; letter-spacing: -0.012em; text-wrap: pretty; }
+.rule strong { color: var(--orange-ink); font-weight: 650; }
+.rule.is-empty { color: var(--ink-3); }
+.kind-search { margin-top: 14px; }
+.kind-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.kind-group { border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); }
+.kind-group[open] { grid-column: 1 / -1; }
+.kind-group summary {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-control);
+  cursor: pointer; font-size: 14px; font-weight: 600; list-style: none;
+}
+.kind-group summary::-webkit-details-marker { display: none; }
+.kind-group summary:hover { background: var(--surface-2); }
+.kind-group summary::after {
+  content: ""; width: 7px; height: 7px; margin: 0 2px 3px 0; flex: none;
+  border-right: 1.75px solid var(--ink-3); border-bottom: 1.75px solid var(--ink-3); transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+.kind-group[open] summary::after { margin-bottom: -3px; transform: rotate(-135deg); }
+.kind-count { margin-left: auto; color: var(--ink-3); font-size: 13px; font-weight: 500; }
+.kind-count.is-some { color: var(--orange-ink); font-weight: 600; }
+.kind-group .choices { padding: 4px 14px 14px; }
+[data-no-match] { margin-top: 10px; }
+/* When to record: only while the camera has an AI model. The interval hangs under its choice, like a model's
+   settings; a few lines differ between face recognition and people and objects. */
+form:has(input[name="analysis"][value=""]:checked) .record-part { display: none; }
+form:has(input[name="record_mode"][value="interval"]:checked) .record-interval { display: block; }
+form:not(:has(input[name="analysis"][value="objects"]:checked)) .only-objects,
+form:not(:has(input[name="analysis"]:is([value="objects"], [value="fire"], [value="falls"]):checked)) .only-things,
+form:not(:has(input[name="analysis"][value="faces"]:checked)) .only-faces { display: none; }
+.record-interval .field { margin-top: 10px; }
+.with-unit select { width: auto; min-width: 128px; }
+.volume.is-heavy { color: var(--caution); font-weight: 550; }
+.record-time { margin: 20px 0 0; }
+@media (max-width: 1080px) {
+  .camera-layout { grid-template-columns: minmax(0, 1fr); }
+  .camera-monitor { position: static; order: -1; }
+  .save-bar { bottom: calc(63px + env(safe-area-inset-bottom)); border-radius: 0; } /* tucked under the tabs, no gap */
+  body:has(.save-bar) .toasts { bottom: calc(140px + env(safe-area-inset-bottom)); } /* above the save bar too */
+}
+@media (max-width: 640px) {
+  .settings-part { padding: 20px 16px; }
+  .model-option { padding: 14px; }
+  .model-settings { padding: 2px 14px 20px 17px; }
+  .rule { font-size: 18px; }
+  .kind-groups { grid-template-columns: minmax(0, 1fr); }
+  .segmented { grid-template-columns: minmax(0, 1fr); } /* the levels one above the other, each on one line */
+  .segmented span { place-items: center start; padding: 6px 12px; text-align: start; }
+  .save-bar { padding: 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kind-group summary::after { transition: none; }
+}
 .form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 .narrow { max-width: 640px; }
 
@@ -259,6 +382,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 .state-bad { background: var(--bad-wash); color: var(--bad); }
 .state-warn { background: var(--caution-wash); color: var(--caution); }
 .state-off { background: var(--surface-2); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.state-object { background: var(--orange-wash); color: var(--orange-ink); }  /* a thing seen, not a face */
 .count {
   display: inline-grid; place-items: center; min-width: 26px; height: 22px; padding: 0 8px; border-radius: 999px;
   background: var(--orange-wash); color: var(--orange-ink); font-size: 12.5px; font-weight: 650;
@@ -308,6 +432,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 .camera-state-no-image .camera-dot, .camera-state-service-down .camera-dot { background: #f59e0b; }
 .camera-state-recording:not(.glass) { background: var(--bad-wash); color: var(--bad); box-shadow: none; }
 .camera-state-no-image:not(.glass), .camera-state-service-down:not(.glass) { background: var(--caution-wash); color: var(--caution); box-shadow: none; }
+.camera-state-live .camera-dot { background: var(--ink-3); }
+.camera-state-no-model .camera-dot { background: #f59e0b; }
+.camera-state-no-model:not(.glass) { background: var(--caution-wash); color: var(--caution); box-shadow: none; }
 @keyframes recording { 50% { opacity: 0.3; } }
 .video-label {
   position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 10px); opacity: 0;
@@ -434,6 +561,7 @@ a.entry-name:hover { color: var(--orange-ink); }
 .camera-body h2 { font-size: 16px; }
 .camera-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
 .test-result { margin-top: 14px; }
+.test-result:empty { display: none; }
 .test-result img { margin-top: 10px; border-radius: var(--radius-control); max-width: 360px; }
 .found { display: grid; gap: 10px; list-style: none; margin: 14px 0 0; padding: 0; }
 .found > li { padding: 12px 14px; border-radius: var(--radius-control); background: var(--surface-2); }
@@ -444,6 +572,85 @@ a.entry-name:hover { color: var(--orange-ink); }
 }
 .tabs a { padding: 6px 14px; border-radius: 999px; color: var(--ink-2); text-decoration: none; font-weight: 550; }
 .tabs a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 18, 24, 0.14); }
+.tab-count { margin-left: 6px; color: var(--ink-3); font-weight: 500; }
+
+/* Records, people and objects. The photos are the evidence; each is framed by the four orange corners the camera
+   draws in the live view, so a finding here looks like what the camera marked. */
+.kind-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 26px; }
+.kind-chips a {
+  display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none;
+  font-size: 14px; font-weight: 550;
+}
+.kind-chips a span { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.kind-chips a:hover { border-color: var(--line-strong); }
+.kind-chips a[aria-current="page"] { border-color: transparent; background: var(--orange-wash); color: var(--orange-ink); }
+.kind-chips a[aria-current="page"] span { color: inherit; }
+.findings { display: grid; gap: 26px; }
+.finding-hour { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 0 20px; }
+.finding-hour h3 {
+  position: sticky; top: 18px; align-self: start; margin: 0;
+  font-size: 22px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1;
+}
+.finding-sheet {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 26px 22px;
+  margin: 0; padding: 6px 0 6px 22px; list-style: none; border-left: 1px solid var(--line);
+}
+.finding-photo { position: relative; display: block; border-radius: 8px; }
+/* The whole thing found, never cropped away: fitted on the live video's backdrop. */
+.finding-photo img {
+  display: block; width: 100%; aspect-ratio: 1; object-fit: contain;
+  border-radius: 8px; background: var(--video);
+}
+.finding-photo::after {
+  --corner: linear-gradient(var(--orange), var(--orange));
+  content: ""; position: absolute; inset: -5px; pointer-events: none;
+  background:
+    var(--corner) top left / 18px 3px, var(--corner) top left / 3px 18px,
+    var(--corner) top right / 18px 3px, var(--corner) top right / 3px 18px,
+    var(--corner) bottom left / 18px 3px, var(--corner) bottom left / 3px 18px,
+    var(--corner) bottom right / 18px 3px, var(--corner) bottom right / 3px 18px;
+  background-repeat: no-repeat;
+  transition: inset 160ms ease-out;
+}
+.finding-photo:hover::after, .finding-photo:focus-visible::after { inset: -9px; }
+.finding-photo:focus-visible { outline: none; }
+.finding-photo:focus-visible img { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 5px var(--orange-strong); }
+.finding-what { display: flex; align-items: baseline; gap: 6px; margin: 12px 0 0; font-weight: 600; }
+.finding-what strong { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finding-count { color: var(--orange-ink); font-weight: 650; }
+.finding-what time { margin-left: auto; color: var(--ink-2); font-weight: 600; }
+.finding-where { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.finding-where span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .finding-photo::after { transition: none; } }
+@media (max-width: 640px) {
+  .finding-hour { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .finding-hour h3 { position: static; font-size: 18px; }
+  .finding-sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 18px; padding: 0; border-left: 0; }
+}
+
+/* Settings, AI models: a card per model, its state as a chip. Green stays for recognized faces only. */
+.models-intro { color: var(--ink-2); max-width: 70ch; margin: 0 0 16px; }
+.models { display: grid; gap: 14px; }
+.model-card { display: grid; gap: 10px; }
+.model-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.model-description { margin: 0; color: var(--ink-2); max-width: 70ch; }
+.model-files { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-2); }
+.model-files li, .model-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.model-files code { color: var(--ink); font-size: 12.5px; word-break: break-all; }
+.model-meta { margin: 0; font-size: 13px; color: var(--ink-3); }
+.model-problem { margin: 0; color: var(--caution); font-size: 14px; }
+.model-card progress { width: 100%; height: 8px; accent-color: var(--orange-strong); }
+.state.model-state-ready { background: var(--ok-wash); color: var(--ok); }
+.state.model-state-downloading { background: var(--orange-wash); color: var(--orange-ink); }
+.state.model-state-failed, .state.model-state-damaged { background: var(--caution-wash); color: var(--caution); }
+.state.model-state-missing, .state.model-state-planned { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+/* Planned models: a dashed outline, since there is nothing to download yet */
+.models-planned { margin-top: 28px; }
+.models-planned h2 { margin-bottom: 10px; font-size: 15px; color: var(--ink-2); }
+.models-planned ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.models-planned li { display: grid; gap: 4px; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius-control); font-size: 14px; color: var(--ink-2); }
+.models-planned strong { color: var(--ink); font-weight: 600; }
 
 /* Settings */
 .settings { display: grid; gap: 16px; }
@@ -526,6 +733,7 @@ a.entry-name:hover { color: var(--orange-ink); }
   .today, .form-grid, .add-photos, .settings-block { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
+  .model-files code { flex-basis: 100%; }  /* the file name on its own line, its size and license below */
   h1 { font-size: 26px; }
   .clock { font-size: 30px; }
   .entries { order: -1; }

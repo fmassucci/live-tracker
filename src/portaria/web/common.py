@@ -36,13 +36,16 @@ PHOTO_PROBLEMS = {
 }
 
 CATEGORIES = {"employee": "Employee", "contractor": "Contractor", "visitor": "Visitor"}
-KINDS = {"recognized": "Recognized", "unknown": "Not recognized", "spoof": "Photo or screen suspected"}
+KINDS = {"recognized": "Recognized", "unknown": "Not recognized", "spoof": "Photo or screen suspected",
+         "detected": "Detected"}  # "detected": a kind of thing the people-and-objects model saw
 DOOR_RESULTS = {"opened": "door opened", "shadow": "test mode, door stayed closed", "kept": "door stayed closed"}
 
-# What a camera is doing, as its chip says it. Every camera records a photo of each person it decides on,
-# never video.
+# What a camera is doing, as its chip says it. A camera with an AI model records a photo of what it finds,
+# never video; one without a model only shows its picture.
 RECORDING_STATES = {
     "recording": "Recording",
+    "live": "Live, no AI model",
+    "no-model": "AI model not downloaded",
     "stopped": "Stopped",
     "no-image": "No image, not recording",
     "service-down": "Recognition service stopped",
@@ -57,7 +60,9 @@ def recording_state(camera: Camera, status: dict | None, service_up: bool) -> st
         return "service-down"
     if not status or not status.get("online"):
         return "no-image"
-    return "recording"
+    if not camera.analysis:
+        return "live"
+    return "no-model" if status.get("model_missing") else "recording"
 
 
 @dataclass

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon %}
+{% from "_records.html" import records_tabs %}
 {% block title %}{{ t("Records") }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -8,6 +9,7 @@
     <p>{{ t("Every decision at the door, with the picture the camera took. Records are kept for {days} days.", days=retention) }}</p>
   </div>
 </div>
+{{ records_tabs("faces", day, tab_counts, t) }}
 
 <form class="filters" method="get" action="/records">
   <div class="field">
@@ -41,6 +43,6 @@
   {% for e in events %}{% include "_record_row.html" %}{% endfor %}
 </ul>
 {% else %}
-<p class="empty">{{ t("No records for this day.") }}</p>
+<p class="empty">{{ t("No records for this day.") }}{% if tab_counts.objects %} <a href="/records?view=objects&day={{ day.isoformat() }}">{{ t("See the records in People and objects") }}</a>{% endif %}</p>
 {% endif %}
 {% endblock %}

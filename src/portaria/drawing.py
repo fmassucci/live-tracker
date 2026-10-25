@@ -1,24 +1,30 @@
-"""Faces marked on frames, for the live view and the event snapshots: corner brackets and a name tag."""
+"""Faces and things marked on frames, for the live view and the event snapshots: corner brackets and a tag."""
 
 from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
+from typing import Protocol
 
 import cv2
 import numpy as np
 
-from portaria.faces import Face
-
 # BGR. Green: recognized. Red: not recognized. Yellow: face not usable yet. Grey: other faces.
-COLORS = {"ok": (94, 197, 34), "bad": (68, 68, 239), "warn": (21, 204, 250), "dim": (170, 170, 170)}
-LABEL_TEXT = {"ok": (14, 12, 11), "bad": (255, 255, 255), "warn": (14, 12, 11), "dim": (14, 12, 11)}
+# Orange, the app's own color: things the people-and-objects model found.
+COLORS = {"ok": (94, 197, 34), "bad": (68, 68, 239), "warn": (21, 204, 250), "dim": (170, 170, 170),
+          "object": (29, 107, 242)}
+LABEL_TEXT = {"ok": (14, 12, 11), "bad": (255, 255, 255), "warn": (14, 12, 11), "dim": (14, 12, 11),
+              "object": (255, 255, 255)}
 FONT = cv2.FONT_HERSHEY_DUPLEX
+
+
+class Boxed(Protocol):
+    box: np.ndarray  # x, y, width, height
 
 
 @dataclass(frozen=True)
 class Overlay:
-    face: Face
+    face: Boxed  # a face (faces.Face), or a thing the people-and-objects model found (objects.Detection)
     label: str
     tone: str  # a key of COLORS
 

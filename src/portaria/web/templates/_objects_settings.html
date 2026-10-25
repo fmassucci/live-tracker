@@ -1,0 +1,81 @@
+{# People and objects: the settings hang from their option in the camera form, shown only while it is chosen.
+   The rule at the top reads the settings back as a sentence, with when they are recorded (the form's next
+   section); camera_form.js keeps it current while you change them. #}
+{# A kind's name inside the sentence: "pessoa", "celular"; a name like "TV" stays as it is. #}
+{% macro in_sentence(key) %}{% set name = t(things[key]) %}{{ name[:1].lower() ~ name[1:] if name[1:2].islower() else name }}{% endmacro %}
+{% set names = [] %}{% for key in objects.kinds %}{% set _ = names.append(in_sentence(key)) %}{% endfor %}
+{% set seconds = objects.min_seconds | int %}
+{% set templates = {
+  "appear": t("Records {kinds} after {seconds} s in the picture."),
+  "appear-now": t("Records {kinds} as soon as they appear."),
+  "interval": t("Records {kinds} after {seconds} s in the picture, and again every {every}."),
+  "interval-now": t("Records {kinds} as soon as they appear, and again every {every}."),
+  "daily": t("Records {kinds} once a day, after {seconds} s in the picture."),
+  "daily-now": t("Records {kinds} once a day, as soon as they appear."),
+} %}
+{% set mode = form.record_mode if form.record_mode in ("interval", "daily") else "appear" %}
+{% set template = templates[mode ~ ("" if seconds else "-now")]
+     .replace("{seconds} ", seconds ~ "\u00a0").replace("{seconds}", seconds | string)
+     .replace("{every}", form.every_value ~ "\u00a0" ~ form.every_unit) %}
+<div class="model-settings model-settings-objects" data-objects data-templates='{{ templates | tojson }}'
+     data-and="{{ t('and') }}" data-none="{{ t('Choose at least one thing to look for.') }}">
+  <p class="rule{% if not names %} is-empty{% endif %}" data-rule aria-live="polite">
+    {%- if names -%}
+    {%- set before, after = template.split("{kinds}") -%}
+    {{ before }}{% for name in names %}<strong>{{ name }}</strong>{% if not loop.last %}{{ ", " if loop.revindex > 2 else " " ~ t("and") ~ " " }}{% endif %}{% endfor %}{{ after }}
+    {%- else -%}
+    {{ t("Choose at least one thing to look for.") }}
+    {%- endif -%}
+  </p>
+
+  <fieldset class="field">
+    <legend>{{ t("Model") }}</legend>
+    <div class="choices">
+      {% for key, (name, ready) in detectors.items() %}
+      <label class="choice"><input type="radio" name="objects_model" value="{{ key }}" {% if objects.model == key %}checked{% endif %}{% if not ready and objects.model != key %} disabled{% endif %}>{{ name }}{% if not ready %} <span class="model-missing">{{ t("not downloaded") }}</span>{% endif %}</label>
+      {% endfor %}
+    </div>
+    <span class="hint">{{ t("D-FINE-M finds more and is slower: about 0.3 s per analysis on this computer, so 2 analyses per second are plenty.") }}{% if not detectors.dfine_m[1] %} <a href="/settings/models">{{ t("Download other models") }}</a>{% endif %}</span>
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>{{ t("What to look for") }}</legend>
+    <div class="choices">
+      {% for key in common %}
+      <label class="choice" data-kind><input type="checkbox" name="kinds" value="{{ key }}" {% if key in objects.kinds %}checked{% endif %} data-name="{{ in_sentence(key) }}">{{ t(things[key]) }}</label>
+      {% endfor %}
+    </div>
+    <label class="visually-hidden" for="kind-search">{{ t("Search the 80 kinds") }}</label>
+    <input type="search" id="kind-search" class="kind-search" placeholder="{{ t('Search the 80 kinds') }}" data-search hidden>
+    <div class="kind-groups">
+      {% for group, keys in groups if keys %}
+      {% set picked = keys | select("in", objects.kinds) | list %}
+      <details class="kind-group" data-group {% if picked %}open{% endif %}>
+        <summary><span>{{ t(group) }}</span><span class="kind-count{% if picked %} is-some{% endif %}" data-count data-total="{{ keys | length }}" data-template="{{ t('{chosen} of {total}') }}">{{ t("{chosen} of {total}", chosen=picked | length, total=keys | length) }}</span></summary>
+        <div class="choices">
+          {% for key in keys %}
+          <label class="choice" data-kind><input type="checkbox" name="kinds" value="{{ key }}" {% if key in objects.kinds %}checked{% endif %} data-name="{{ in_sentence(key) }}">{{ t(things[key]) }}</label>
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    <p class="hint" data-no-match hidden>{{ t("No kind has this name.") }}</p>
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>{{ t("Sensitivity") }}</legend>
+    <div class="segmented">
+      {% for value, label in sensitivity %}
+      <label><input type="radio" name="confidence" value="{{ value }}" {% if objects.level == value %}checked{% endif %}><span>{{ t(label) }}</span></label>
+      {% endfor %}
+    </div>
+    <span class="hint">{{ t("If it records things that aren't there, choose Fewer false alarms. If it misses what matters, choose Finds more.") }}</span>
+  </fieldset>
+
+  <div class="field">
+    <label for="fps">{{ t("Analyses per second") }}</label>
+    <input type="number" id="fps" name="fps" min="1" max="10" step="1" value="{{ objects.fps | int }}">
+    <span class="hint">{{ t("More analyses notice sooner, and use more of the processor.") }}</span>
+  </div>
+</div>

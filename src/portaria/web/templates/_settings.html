@@ -1,0 +1,7 @@
+{# The tabs at the top of every Settings page. #}
+{% macro settings_tabs(current, t) -%}
+<nav class="tabs" aria-label="{{ t('Settings') }}">
+  <a href="/settings" {% if current == "general" %}aria-current="page"{% endif %}>{{ t("General") }}</a>
+  <a href="/settings/models" {% if current == "models" %}aria-current="page"{% endif %}>{{ t("AI models") }}</a>
+</nav>
+{%- endmacro %}

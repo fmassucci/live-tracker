@@ -1,80 +1,161 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, camera_chip, switch_button %}
-{% block title %}{{ t("Edit camera") if camera else t("Add a camera") }}{% endblock %}
+{% block title %}{{ camera.name if camera else t("Add a camera") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>{{ t("Edit camera") if camera else t("Add a camera") }}</h1>
-    <p>{{ t("Most IP cameras have a video address (RTSP), like rtsp://user:password@192.168.1.50:554/onvif1. Test it before saving.") }}</p>
+    <a class="back-link" href="/cameras">{{ icon("chevron-left") }}{{ t("Cameras") }}</a>
+    <h1>{{ camera.name if camera else t("Add a camera") }}</h1>
+    {% if not camera %}<p>{{ t("Most IP cameras have a video address (RTSP), like rtsp://user:password@192.168.1.50:554/onvif1. Test it before saving.") }}</p>{% endif %}
   </div>
-  {% if camera and state %}
-  <div class="actions">
-    {{ camera_chip(state, t(recording_states[state]), "", camera.id) }}
-    {{ switch_button(camera, "/cameras/" ~ camera.id, t) }}
-  </div>
-  {% endif %}
+  {% if camera %}<div class="actions">{{ switch_button(camera, "/cameras/" ~ camera.id, t) }}</div>{% endif %}
 </div>
 {% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
 
-{% if two_lenses %}
-<section class="subpanel" aria-labelledby="lenses-title" style="margin-bottom: 18px">
-  <h3 id="lenses-title">{{ t("Two lenses in one picture") }}</h3>
-  <p class="muted" style="margin: 0 0 14px">{{ t("This camera sends two pictures, one above the other. Split it and each lens becomes a camera of its own, with its own name, use and live image.") }}</p>
-  <form method="post" action="/cameras/{{ camera.id }}/split">
-    <button class="button">{{ t("Split into two cameras") }}</button>
-  </form>
-</section>
-{% endif %}
-
-<div class="form-grid">
-  <form method="post" action="{{ '/cameras/' ~ camera.id if camera else '/cameras/new' }}" class="panel">
+<div class="camera-layout">
+  <form method="post" action="{{ '/cameras/' ~ camera.id if camera else '/cameras/new' }}" class="panel camera-settings">
     <input type="hidden" name="camera_id" value="{{ camera.id if camera else '' }}">
-    <div class="field">
-      <label for="name">{{ t("Name") }}</label>
-      <input type="text" id="name" name="name" value="{{ form.name or '' }}" required maxlength="80" placeholder="{{ t('Staff entrance') }}">
-    </div>
-    <div class="field">
-      <label for="url">{{ t("Video address") }}</label>
-      <input type="text" id="url" name="url" value="{{ form.url or '' }}" required spellcheck="false" autocomplete="off">
-      {% if camera %}<span class="hint">{{ t("The password is hidden. Leave the address as it is to keep it.") }}</span>{% endif %}
-    </div>
-    <fieldset class="field">
-      <legend>{{ t("AI model") }}</legend>
-      <div class="choices">
-        {% for key, label in analyses.items() %}
-        <label class="choice"><input type="radio" name="analysis" value="{{ key }}" {% if form.analysis == key %}checked{% endif %}>{{ t(label) }}</label>
-        {% endfor %}
+
+    <section class="settings-part" aria-labelledby="part-video">
+      <h2 id="part-video">{{ t("Video") }}</h2>
+      <p class="part-note">{{ t("Where the system gets this camera's picture.") }}</p>
+      <div class="field">
+        <label for="name">{{ t("Name") }}</label>
+        <input type="text" id="name" name="name" value="{{ form.name or '' }}" required maxlength="80" placeholder="{{ t('Staff entrance') }}">
       </div>
-      <span class="hint">{{ t("Recognizes the registered people and keeps a photo of everyone it sees in Records.") }}{% if not camera %} {{ t("It starts recording as soon as you save. You can stop it at any time.") }}{% endif %}</span>
-    </fieldset>
-    <fieldset class="field">
-      <legend>{{ t("Attached device") }}</legend>
+      <div class="field">
+        <label for="url">{{ t("Video address") }}</label>
+        <div class="address-row">
+          <input type="text" id="url" name="url" value="{{ form.url or '' }}" required spellcheck="false" autocomplete="off">
+          <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>
+        </div>
+        {% if camera %}<span class="hint">{{ t("The password is hidden. Leave the address as it is to keep it.") }}</span>{% endif %}
+        <div id="test-result" class="test-result" aria-live="polite"></div>
+      </div>
+      {% if camera and camera.part %}
+      <fieldset class="field">
+        <legend>{{ t("Picture") }}</legend>
+        <div class="choices">
+          {% for key, label in parts.items() %}
+          <label class="choice"><input type="radio" name="part" value="{{ key }}" {% if form.part == key %}checked{% endif %}>{{ t(label) }}</label>
+          {% endfor %}
+        </div>
+        <span class="hint">{{ t("Two-lens cameras send both lenses in one picture, one above the other.") }}</span>
+      </fieldset>
+      {% endif %}
+      {% if two_lenses %}
+      <div class="subpanel lens-notice">
+        <h3>{{ t("Two lenses in one picture") }}</h3>
+        <p class="muted">{{ t("This camera sends two pictures, one above the other. Split it and each lens becomes a camera of its own, with its own name, use and live image.") }}</p>
+        <button class="button button-quiet" form="split-form">{{ t("Split into two cameras") }}</button>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="settings-part" aria-labelledby="part-model">
+      <h2 id="part-model">{{ t("AI model") }}</h2>
+      <p class="part-note">{{ t("What the system looks for in the picture.") }}</p>
+      <fieldset class="model-options">
+        <legend class="visually-hidden">{{ t("AI model") }}</legend>
+        {% for key, (label, ready) in analyses.items() %}
+        <label class="model-option">
+          <input type="radio" name="analysis" value="{{ key }}" {% if form.analysis == key %}checked{% endif %}>
+          <span>
+            <strong>{{ t(label) }}</strong>{% if not ready %} <span class="model-missing">{{ t("not downloaded") }}</span>{% endif %}
+            {% if hints.get(key) %}<span class="model-option-hint">{{ t(hints[key]) }}</span>{% endif %}
+          </span>
+        </label>
+        {% if key == "objects" %}{% include "_objects_settings.html" %}{% endif %}
+        {% if key == "fire" %}{% include "_fire_settings.html" %}{% endif %}
+        {% if key == "falls" %}{% include "_falls_settings.html" %}{% endif %}
+        {% endfor %}
+      </fieldset>
+      <p class="hint">{{ t("Only downloaded models appear here.") }} <a href="/settings/models">{{ t("Download other models") }}</a></p>
+    </section>
+
+    {# Hidden while the camera has no AI model (style.css, .record-part). #}
+    <section class="settings-part record-part" aria-labelledby="part-record">
+      <h2 id="part-record">{{ t("When to record") }}</h2>
+      <p class="part-note">{{ t("When the system keeps a photo of what the model finds, in Records.") }}</p>
+      <fieldset class="model-options">
+        <legend class="visually-hidden">{{ t("When to record") }}</legend>
+        {% for key, label in record_modes.items() %}
+        <label class="model-option">
+          <input type="radio" name="record_mode" value="{{ key }}" {% if form.record_mode == key %}checked{% endif %}>
+          <span>
+            <strong>{{ t(label) }}</strong>
+            {% if key == "interval" %}
+            <span class="model-option-hint only-things">{{ t("One photo when it appears, and another every interval while it stays.") }}</span>
+            <span class="model-option-hint only-faces">{{ t("At most one photo of each person every interval.") }}</span>
+            {% else %}
+            <span class="model-option-hint">{{ t(record_hints[key]) }}</span>
+            {% endif %}
+          </span>
+        </label>
+        {% if key == "interval" %}
+        <div class="model-settings record-interval">
+          <div class="field">
+            <label for="every_value">{{ t("Interval") }}</label>
+            <span class="with-unit">
+              <input type="number" id="every_value" name="every_value" min="1" step="1" value="{{ form.every_value }}">
+              <select name="every_unit" aria-label="{{ t('Unit') }}">
+                {% for unit, unit_name in units.items() %}<option value="{{ unit }}" {% if form.every_unit == unit %}selected{% endif %}>{{ t(unit_name) }}</option>{% endfor %}
+              </select>
+            </span>
+            <span class="hint volume" data-volume hidden
+                  data-template="{{ t('Up to {count} photos a day of each person or kind of thing, about {size}.') }}"
+                  data-invalid="{{ t('Choose an interval between 5 seconds and 24 hours.') }}"></span>
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </fieldset>
+      <p class="hint only-faces">{{ t("Faces that aren't recognized are always recorded, at every visit: each can be someone else.") }}</p>
+      <div class="field only-objects record-time">
+        <label for="min_seconds">{{ t("Minimum time in the picture") }}</label>
+        <span class="with-unit"><input type="number" id="min_seconds" name="min_seconds" min="0" max="600" step="1" value="{{ objects.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+        <span class="hint">{{ t("Only counts what stays at least this long, so things passing by aren't recorded.") }}</span>
+      </div>
+    </section>
+
+    <section class="settings-part" aria-labelledby="part-device">
+      <h2 id="part-device">{{ t("Attached device") }}</h2>
+      <p class="part-note">{{ t("With a door, it opens when someone with access is recognized, and the entry shows on Today.") }}</p>
       <div class="choices">
         {% for key, label in devices.items() %}
         <label class="choice"><input type="radio" name="device" value="{{ key }}" {% if form.device == key %}checked{% endif %}>{{ t(label) }}</label>
         {% endfor %}
       </div>
-      <span class="hint">{{ t("With a door, it opens when someone with access is recognized, and the entry shows on Today.") }}</span>
-    </fieldset>
-    {% if camera and camera.part %}
-    <fieldset class="field">
-      <legend>{{ t("Picture") }}</legend>
-      <div class="choices">
-        {% for key, label in parts.items() %}
-        <label class="choice"><input type="radio" name="part" value="{{ key }}" {% if form.part == key %}checked{% endif %}>{{ t(label) }}</label>
-        {% endfor %}
-      </div>
-      <span class="hint">{{ t("Two-lens cameras send both lenses in one picture, one above the other.") }}</span>
-    </fieldset>
-    {% endif %}
-    <div class="actions">
+    </section>
+
+    <div class="save-bar">
       <button class="button">{{ t("Save camera") }}</button>
-      <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>
       <a class="button button-quiet" href="/cameras">{{ t("Cancel") }}</a>
     </div>
-    <div id="test-result" class="test-result" aria-live="polite"></div>
   </form>
 
+  {% if camera %}
+  <aside class="camera-monitor" aria-label="{{ t('Live image from {name}', name=camera.name) }}">
+    <div class="video" style="--ratio: {{ camera_status.size | aspect }}">
+      {% if state == "stopped" %}
+      <div class="video-empty" data-waiting-for="{{ camera.id }}">
+        <p>{{ t("Recording is stopped: nobody is recognized by this camera.") if camera.analysis else t("This camera is turned off.") }}</p>
+      </div>
+      {% elif state == "service-down" %}
+      <div class="video-empty" data-waiting-for="{{ camera.id }}">
+        <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
+      </div>
+      {% else %}
+      <img src="/cameras/{{ camera.id }}/stream" data-stream-for="{{ camera.id }}" alt="{{ t('Live image from {name}', name=camera.name) }}">
+      {% endif %}
+      {% if state %}<div class="video-chips">{{ camera_chip(state, t(recording_states[state]), "glass", camera.id) }}</div>{% endif %}
+    </div>
+    {% if camera_status.size %}
+    <p class="monitor-facts"><span>{{ camera_status.size }}</span><span>{{ t("{fps} fps", fps=t.number(camera_status.fps or 0, 0)) }}</span></p>
+    {% endif %}
+    <p class="hint">{{ t("Changes show here after you save.") }}</p>
+  </aside>
+  {% else %}
   <section class="panel" aria-labelledby="search-title">
     <h2 id="search-title">{{ t("Find cameras on this network") }}</h2>
     <p class="muted small" style="margin: -6px 0 16px">{{ t("Works with cameras that support ONVIF. With the camera's user and password, the system also lists its video addresses.") }}</p>
@@ -91,8 +172,10 @@
     </form>
     <div id="found" aria-live="polite"></div>
   </section>
+  {% endif %}
 </div>
 
+{% if two_lenses %}<form id="split-form" method="post" action="/cameras/{{ camera.id }}/split" hidden></form>{% endif %}
 {% if camera %}
 <section class="section">
   <div class="danger-zone">
@@ -105,3 +188,4 @@
 </section>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="/static/camera_form.js?v={{ asset_version }}" defer></script>{% endblock %}

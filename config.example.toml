@@ -22,6 +22,11 @@ model = "auraface"
 accept_threshold = 0.45
 min_margin = 0.08        # best person must beat the runner-up by this much
 
+[liveness]
+# Once the liveness model is downloaded (Settings, AI models), a face must look at least this likely to be real
+# (0 to 1) to count as a person rather than a photo or a screen. Real faces at the door score about 0.98.
+threshold = 0.5
+
 [decision]
 window_s = 1.5           # agreeing frames must fall within this window
 min_votes = 3

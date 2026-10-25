@@ -10,7 +10,7 @@
 <div class="page-head">
   <div>
     <h1>{{ t("Cameras") }}</h1>
-    <p>{{ t("Door cameras record each entry with a photo of the person; there is no video recording. The other cameras only show the image.") }}</p>
+    <p>{{ t("Cameras with an AI model record what they find, with a photo; there is no video recording. Cameras without a model only show the image.") }}</p>
   </div>
   <a class="button" href="/cameras/new">{{ icon("plus") }}{{ t("Add a camera") }}</a>
 </div>
@@ -31,12 +31,15 @@
     <div class="camera-body">
       <h2>{{ c.name }}</h2>
       <div class="camera-meta">
-        <span>{{ t(analyses[c.analysis]) }}</span>
+        <span>{{ t(analyses.get(c.analysis, c.analysis)) }}</span>
+        {% if c.analysis %}<span>{{ rules[c.id] }}</span>{% endif %}
         {% if c.device == "door" %}<span>{{ t("Opens the door") }}</span>{% endif %}
-        {% if state == "recording" %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
+        {% if state in ("recording", "live", "no-model") %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
       </div>
       {% if state == "no-image" %}
       <p class="small muted">{{ t("Check the camera's power, network and address.") }}</p>
+      {% elif state == "no-model" %}
+      <p class="small muted">{{ t("Its AI model isn't downloaded.") }} <a href="/settings/models">{{ t("Download it in Settings") }}</a></p>
       {% endif %}
       <div class="actions">
         {{ switch_button(c, "/cameras", t, "button-small") }}

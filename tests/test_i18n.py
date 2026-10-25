@@ -8,7 +8,7 @@ import ast
 import re
 from pathlib import Path
 
-from portaria import faces, i18n, pipeline
+from portaria import faces, falls, fire, i18n, objects, pipeline
 
 SRC = Path(__file__).parents[1] / "src" / "portaria"
 TEMPLATE_KEY = re.compile(r"""\bt\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
@@ -71,9 +71,12 @@ def _strings(nodes: list) -> set[str]:
 
 
 def dynamic_keys() -> set[str]:
-    """Texts chosen at run time: dates, and why a face can't be used (shown on the live video)."""
-    problems = {faces.NO_FACE, faces.SEVERAL_FACES, faces.TOO_SMALL, faces.TURNED_AWAY, faces.BLURRY, pipeline.FROZEN}
-    return {*i18n.WEEKDAYS, *i18n.MONTHS, "{weekday}, {month} {day}", *problems}
+    """Texts chosen at run time: dates, why a face can't be used (shown on the live video), and the names of the
+    things cameras record."""
+    problems = {faces.NO_FACE, faces.SEVERAL_FACES, faces.TOO_SMALL, faces.TURNED_AWAY, faces.BLURRY, pipeline.FROZEN,
+                pipeline.SPOOFED}
+    things = {*objects.NAMES.values(), *fire.NAMES.values(), *falls.NAMES.values()}
+    return {*i18n.WEEKDAYS, *i18n.MONTHS, "{weekday}, {month} {day}", *problems, *things}
 
 
 def all_keys() -> set[str]:

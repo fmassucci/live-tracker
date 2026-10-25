@@ -8,7 +8,8 @@
   <time datetime="{{ e.at.isoformat() }}">{{ e.at.strftime("%H:%M") }}</time>
   <div>
     <p class="who">
-      {% if e.person_id %}<a href="/people/{{ e.person_id }}">{{ e.person_name }}</a>
+      {% if e.kind == "detected" %}{{ t(things.get(e.label, e.label)) }}{% if e.count > 1 %} <span class="muted">&times;{{ e.count }}</span>{% endif %}
+      {% elif e.person_id %}<a href="/people/{{ e.person_id }}">{{ e.person_name }}</a>
       {% elif e.person_name %}{{ e.person_name }}
       {% else %}{{ t("Unknown person") }}{% endif %}
     </p>
@@ -19,7 +20,7 @@
     </p>
   </div>
   <div class="actions">
-    <span class="state {{ '' if e.kind == 'recognized' else 'state-bad' }}">{{ t(kinds[e.kind]) }}</span>
-    <span class="muted small">{{ t("Match {score}", score=t.number(e.score)) }}</span>
+    <span class="state {{ {'recognized': '', 'detected': 'state-object'}.get(e.kind, 'state-bad') }}">{{ t(kinds[e.kind]) }}</span>
+    <span class="muted small">{{ t("Confidence {score}", score=t.number(e.score)) if e.kind == "detected" else t("Match {score}", score=t.number(e.score)) }}</span>
   </div>
 </li>

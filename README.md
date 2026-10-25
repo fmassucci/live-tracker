@@ -2,8 +2,9 @@
 
 Face recognition at the staff entrance, with a web UI in Portuguese and English.
 
-**MVP stage:** the door is not controlled yet. Decisions are only recorded ("shadow mode") until a liveness check
-and the ESP32 relay exist. Without liveness, a photo of an employee held up to the camera would be accepted.
+**MVP stage:** the door is not controlled yet. Decisions are only recorded ("shadow mode") until the ESP32 relay
+exists. Download the liveness check (Settings, AI models): without it, a photo of an employee held up to the
+camera would be accepted.
 
 ## How it fits together
 
@@ -41,6 +42,31 @@ copy config.example.toml config.toml
 
 Only AuraFace's recognition file is downloaded. The other files in its repository are byte-for-byte InsightFace
 models, which are licensed for non-commercial research only.
+
+The other models are downloaded in Settings, AI models, where each card says whether it's downloaded. Each camera
+then chooses one in its settings; liveness has no camera of its own, since face recognition uses it by itself.
+
+| Model | Role | License |
+|---|---|---|
+| MiniFASNetV2 + V1SE (Silent-Face) | liveness: tells a real face from a photo or a screen | Apache-2.0 |
+| YOLOX-S | people and objects, COCO's 80 kinds | Apache-2.0 |
+| D-FINE-M | people and objects, more accurate and slower (chosen in each camera's settings) | Apache-2.0 |
+| YOLO26n, trained on fire and smoke | fire and smoke | AGPL-3.0 (Ultralytics) |
+| YOLOv8s-pose | falls: someone who stays lying on the floor | AGPL-3.0 (Ultralytics) |
+
+The Ultralytics models are AGPL-3.0, which is fine for this in-house system; selling or hosting it for others
+would need Ultralytics' enterprise license. Fire and smoke only adds to certified smoke detectors, never replaces
+them: ovens, steam and flour dust can look like fire or smoke, so try it with the ovens on. On 606 of D-Fire's
+test photos, at *Balanced* it found 79% of the fires and 76% of the smoke, and at *Finds more* 86% and 83%; both
+raised a false alarm on 2% of the photos without either.
+Falls counts a person as lying when the torso leans 50° or more from upright; on 189 labelled photos it found
+82% of the falls and took nobody upright for one. `[liveness] threshold` in `config.toml` sets how sure the
+liveness check must be (real faces at the Jortan score about 0.98).
+
+People and objects runs on YOLOX-S or D-FINE-M, chosen under *Model* in each camera's settings. On 250 COCO
+photos, at *Balanced* and with as many false boxes as YOLOX-S, D-FINE-M found 68% of the people (YOLOX-S: 58%)
+and 57% of all the things (41%), at about 0.3 s per analysis on the processor instead of 0.12, so 2 analyses per
+second suit it. Its sensitivity levels have their own thresholds (`dfine.py`), since its scores run higher.
 
 ## Run
 
@@ -133,5 +159,6 @@ python -m pytest
 
 ## Not built yet
 
-- Liveness check (passive check on the regular camera first; depth or infrared later)
 - ESP32 door relay
+- Alerts by e-mail or WhatsApp, for fire, smoke and falls among others
+- Liveness with depth or infrared, when a camera has it (the current check uses the regular picture)

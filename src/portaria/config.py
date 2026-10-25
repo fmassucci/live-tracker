@@ -40,6 +40,11 @@ class RecognitionConfig:
 
 
 @dataclass
+class LivenessConfig:
+    threshold: float = 0.5  # how likely a face must look to be real, 0 to 1, once the liveness model is downloaded
+
+
+@dataclass
 class DecisionConfig:
     window_s: float = 1.5
     min_votes: int = 3
@@ -84,6 +89,7 @@ class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
+    liveness: LivenessConfig = field(default_factory=LivenessConfig)
     decision: DecisionConfig = field(default_factory=DecisionConfig)
     door: DoorConfig = field(default_factory=DoorConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
