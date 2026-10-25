@@ -46,7 +46,7 @@
 {% if card.toast %}
 <div hx-swap-oob="beforeend:#toasts">
   {% if card.toast == "ok" %}
-  {% call toast("ok", "check", t("Close"), autohide=true) %}{{ t("Download finished: {name}.", name=t(m.name)) }}{% endcall %}
+  {% call toast("ok", "check", t("Close")) %}{{ t("Download finished: {name}.", name=t(m.name)) }}{% endcall %}
   {% else %}
   {% call toast("bad", "alert", t("Close")) %}{{ t("The download of {name} didn't finish. Check the internet connection and try again.", name=t(m.name)) }}{% endcall %}
   {% endif %}

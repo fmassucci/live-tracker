@@ -55,7 +55,7 @@
   {% endif %}
   {% block toasts %}{% endblock %}
   {% for message in flashes %}
-  {% call toast(message.tone, "check" if message.tone == "ok" else "alert", t("Close"), autohide=message.tone == "ok") %}{{ t(message.text, **message["values"]) }}{% endcall %}
+  {% call toast(message.tone, "check" if message.tone == "ok" else "alert", t("Close")) %}{{ t(message.text, **message["values"]) }}{% endcall %}
   {% endfor %}
 </div>
 {% block scripts %}{% endblock %}

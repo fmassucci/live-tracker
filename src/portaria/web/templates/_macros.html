@@ -22,9 +22,10 @@
 {%- endmacro %}
 
 {# A toast for the stack in the bottom-right corner (#toasts in base.html). The message is the call block.
-   hide_url: a standing notice that stays closed until the next sign-in. autohide: goes away by itself. #}
-{% macro toast(tone, icon_name, close_label, hide_url="", autohide=false) -%}
-<div class="toast toast-{{ tone }}" data-toast{% if hide_url %} data-hide-url="{{ hide_url }}"{% endif %}{% if autohide %} data-autohide{% endif %} role="{{ 'alert' if tone == 'bad' else 'status' }}">
+   Every toast goes away by itself, after a time that depends on its tone (style.css, app.js).
+   hide_url: a standing notice that, once closed, stays closed until the next sign-in. #}
+{% macro toast(tone, icon_name, close_label, hide_url="") -%}
+<div class="toast toast-{{ tone }}" data-toast{% if hide_url %} data-hide-url="{{ hide_url }}"{% endif %} role="{{ 'alert' if tone == 'bad' else 'status' }}">
   <span class="toast-icon">{{ icon(icon_name) }}</span>
   <p>{{ caller() }}</p>
   <button type="button" class="toast-close" data-toast-close aria-label="{{ close_label }}" title="{{ close_label }}">{{ icon("close") }}</button>

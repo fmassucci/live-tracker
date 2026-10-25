@@ -139,28 +139,42 @@
     }, 250);
   }
 
-  // Toasts, in the bottom-right corner. A result that went well goes away by itself; closing a
+  // Toasts, in the bottom-right corner. Every one goes away by itself, after the time its tone sets in the
+  // stylesheet (--toast-time): good news soon, warnings and errors later. Pointing at a toast or moving into it
+  // with the keyboard holds it, and so does the line along its bottom that shows the time left. Closing a
   // standing notice (test mode, default password) keeps it closed until the next sign-in.
   const toasts = document.getElementById("toasts");
   const dismiss = (toast) => {
     toast.classList.add("is-leaving");
     setTimeout(() => toast.remove(), 200);
   };
-  const autohide = (toast) => {
-    if (!("autohide" in toast.dataset)) return;
-    let timer = setTimeout(() => dismiss(toast), 6000);
-    toast.addEventListener("mouseenter", () => clearTimeout(timer));
-    toast.addEventListener("mouseleave", () => {
-      timer = setTimeout(() => dismiss(toast), 3000);
-    });
+  const time = (toast) => {
+    let left = parseFloat(getComputedStyle(toast).getPropertyValue("--toast-time")) * 1000 || 6000;
+    let since = performance.now();
+    let timer = setTimeout(() => dismiss(toast), left);
+    let holds = 0; // the pointer and the keyboard focus each hold it
+    const hold = () => {
+      if (holds++ > 0) return;
+      clearTimeout(timer);
+      left -= performance.now() - since;
+    };
+    const release = () => {
+      if (holds === 0 || --holds > 0) return;
+      since = performance.now();
+      timer = setTimeout(() => dismiss(toast), left);
+    };
+    toast.addEventListener("mouseenter", hold);
+    toast.addEventListener("mouseleave", release);
+    toast.addEventListener("focusin", hold);
+    toast.addEventListener("focusout", release);
   };
   if (toasts) {
-    toasts.querySelectorAll("[data-toast]").forEach(autohide);
+    toasts.querySelectorAll("[data-toast]").forEach(time);
     // toasts that come with a page fragment, such as a camera test
     new MutationObserver((changes) => {
       for (const change of changes) {
         for (const node of change.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE && node.matches("[data-toast]")) autohide(node);
+          if (node.nodeType === Node.ELEMENT_NODE && node.matches("[data-toast]")) time(node);
         }
       }
     }).observe(toasts, { childList: true });
