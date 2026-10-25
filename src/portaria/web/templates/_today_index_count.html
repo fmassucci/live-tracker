@@ -1,3 +1,3 @@
 {# How much a camera recorded today, beside its name in Today's list of cameras: people, and things found. #}
 {% set recorded = (people.get(c.id, []) | length) + found_totals.get(c.id, 0) %}
-<span class="camera-index-count" id="index-count-{{ c.id }}" {% if oob %}hx-swap-oob="true"{% endif %}>{{ recorded or "" }}</span>
+<span class="page-index-count" id="index-count-{{ c.id }}" {% if oob %}hx-swap-oob="true"{% endif %}>{{ recorded or "" }}</span>

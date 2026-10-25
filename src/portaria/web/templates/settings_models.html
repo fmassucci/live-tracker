@@ -7,6 +7,20 @@
 </div>
 {{ settings_tabs("models", t) }}
 
+{% set planned = cards | selectattr("state", "equalto", "planned") | list %}
+{# Beside the menu: a list of the models that jumps to each, and follows the one in view. #}
+<nav class="page-index" aria-label="{{ t('On this page') }}" data-page-index>
+  <p class="page-index-title">{{ t("On this page") }}</p>
+  <ul>
+    {% for card in cards if card.state != "planned" %}
+    <li><a href="#model-{{ card.model.key }}" data-for="model-{{ card.model.key }}"><span class="page-index-name">{{ t(card.model.name) }}</span></a></li>
+    {% endfor %}
+    {% if planned %}
+    <li><a href="#planned" data-for="planned"><span class="page-index-name">{{ t("Coming soon") }}</span></a></li>
+    {% endif %}
+  </ul>
+</nav>
+
 <p class="models-intro">
   {{ t("Download a model once, then choose it in each camera's settings.") }}
   {{ t("Models run on the GPU.") if gpu else t("Models run on the processor (CPU); the GPU isn't enabled yet.") }}
@@ -14,9 +28,8 @@
 <div class="models">
   {% for card in cards if card.state != "planned" %}{% include "_model_card.html" %}{% endfor %}
 </div>
-{% set planned = cards | selectattr("state", "equalto", "planned") | list %}
 {% if planned %}
-<section class="models-planned" aria-labelledby="planned-title">
+<section class="models-planned" id="planned" aria-labelledby="planned-title">
   <h2 id="planned-title">{{ t("Coming soon") }}</h2>
   <ul>
     {% for card in planned %}

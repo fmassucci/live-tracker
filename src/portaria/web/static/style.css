@@ -461,6 +461,28 @@ form:not(:has(input[name="analysis"][value="faces"]:checked)) .only-faces { disp
 .video[data-tone="ok"] .video-label { background: rgba(21, 128, 61, 0.88); }
 .video[data-tone="bad"] .video-label { background: rgba(185, 28, 28, 0.88); }
 
+/* A page's own index (Today's cameras, the parts of Settings) sits on the page's gray right beside the menu: the
+   title level with the brand, the first entry level with the menu's first item, and the entries shaped like the
+   menu's items. A click jumps to its part, and the entry of the part in view stays marked (app.js). */
+.shell:has(.page-index) .main { padding-left: 208px; }
+.page-index {
+  position: fixed; z-index: 10; top: 0; bottom: 0; left: 240px; width: 208px;
+  display: flex; flex-direction: column; gap: 26px; padding: 20px 14px; overflow-y: auto;
+}
+.page-index-title { display: flex; align-items: center; min-height: 36px; padding: 0 10px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.page-index ul { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.page-index a {
+  display: flex; align-items: baseline; gap: 10px; padding: 9px 10px; border-radius: var(--radius-control);
+  color: var(--ink-2); font-weight: 520; text-decoration: none;
+}
+.page-index a:hover { background: var(--surface); color: var(--ink); }
+.page-index a[aria-current="true"] { background: var(--orange-wash); color: var(--orange-ink); font-weight: 600; }
+.page-index-name { min-width: 0; overflow-wrap: anywhere; } /* a long name, such as an AI model's, wraps instead of being cut */
+.page-index-count { margin-left: auto; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+.page-index a[aria-current="true"] .page-index-count { color: inherit; }
+html:has(.page-index) { scroll-padding-top: 24px; } /* a part jumped to stops a little below the top */
+@media (prefers-reduced-motion: no-preference) { html:has(.page-index) { scroll-behavior: smooth; } }
+
 /* Today: one row per camera, its picture beside what it recorded today. The page is wide, with the pictures a
    little smaller than on Live; a list of the cameras, beside the menu, jumps to each. */
 .page-wide { max-width: 1600px; }
@@ -468,26 +490,7 @@ form:not(:has(input[name="analysis"][value="faces"]:checked)) .only-faces { disp
 .today-head { grid-area: head; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
 .clock { font-size: 40px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
 .today-rows { grid-area: rows; display: grid; gap: 44px; min-width: 0; container-type: inline-size; }
-/* The list of cameras sits on the page's gray right beside the menu: the title level with the brand, the first
-   camera level with Today, and the cameras shaped like the menu's items. */
-.shell:has(.camera-index) .main { padding-left: 208px; }
-.camera-index {
-  position: fixed; z-index: 10; top: 0; bottom: 0; left: 240px; width: 208px;
-  display: flex; flex-direction: column; gap: 26px; padding: 20px 14px; overflow-y: auto;
-}
-.camera-index-title { display: flex; align-items: center; min-height: 36px; padding: 0 10px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
-.camera-index ul { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
-.camera-index a {
-  display: flex; align-items: baseline; gap: 10px; padding: 9px 10px; border-radius: var(--radius-control);
-  color: var(--ink-2); font-weight: 520; text-decoration: none;
-}
-.camera-index a:hover { background: var(--surface); color: var(--ink); }
-.camera-index a[aria-current="true"] { background: var(--orange-wash); color: var(--orange-ink); font-weight: 600; }
-.camera-index-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.camera-index-count { margin-left: auto; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
-.camera-index a[aria-current="true"] .camera-index-count { color: inherit; }
-@media (prefers-reduced-motion: no-preference) { html:has(.camera-index) { scroll-behavior: smooth; } }
-.cam-row { min-width: 0; scroll-margin-top: 24px; }
+.cam-row { min-width: 0; }
 .cam-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
 .cam-row-head h2 { font-size: 20px; }
 .cam-model { color: var(--ink-2); font-size: 14px; font-weight: 500; } /* the camera's AI model, beside its name */
@@ -721,9 +724,14 @@ a.entry-name:hover { color: var(--orange-ink); }
 .models-planned strong { color: var(--ink); font-weight: 600; }
 
 /* Settings */
-.settings { display: grid; gap: 16px; }
+.settings { display: grid; gap: 16px; container-type: inline-size; }
 .settings-block { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 32px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-panel); }
 .settings-block > div:first-child p { color: var(--ink-2); margin-top: 6px; max-width: 46ch; font-size: 14px; }
+/* Beside the page's index, a smaller window leaves too little room for both columns: the controls go under the
+   part's title, as on a tablet. */
+@container (max-width: 800px) {
+  .settings-block { grid-template-columns: minmax(0, 1fr); }
+}
 .logo-sample { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 12px 14px; border-radius: var(--radius-control); background: var(--surface-2); font-weight: 650; }
 .copy-field { display: flex; gap: 8px; }
 .copy-field input { font-size: 13.5px; }
@@ -856,14 +864,15 @@ a.entry-name:hover { color: var(--orange-ink); }
   .toasts { left: 16px; right: 16px; bottom: calc(74px + env(safe-area-inset-bottom)); width: auto; } /* above the tabs */
   body:has(.toast) .page { padding-bottom: 280px; }
   .form-grid, .add-photos, .settings-block { grid-template-columns: minmax(0, 1fr); }
-  .shell:has(.camera-index) .main { padding-left: 0; }
+  .shell:has(.page-index) .main { padding-left: 0; }
   .today-layout.has-index { grid-template-areas: "head" "index" "rows"; }
-  .camera-index { grid-area: index; position: static; width: auto; display: block; padding: 0; overflow: visible; margin-bottom: 22px; }
-  .camera-index-title { display: none; }
-  .camera-index ul { flex-direction: row; gap: 8px; overflow-x: auto; padding-bottom: 4px; } /* the cameras as chips */
-  .camera-index a { flex: none; padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 14px; }
-  .camera-index a[aria-current="true"] { border-color: transparent; }
-  .cam-row { scroll-margin-top: 76px; } /* below the top bar */
+  .page-index { grid-area: index; position: static; width: auto; display: block; padding: 0; overflow: visible; margin-bottom: 22px; }
+  .page-index-title { display: none; }
+  .page-index ul { flex-direction: row; gap: 8px; overflow-x: auto; padding-bottom: 4px; } /* the entries as chips */
+  .page-index li { flex: none; } /* each chip on one line; the row scrolls instead */
+  .page-index a { padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 14px; }
+  .page-index a[aria-current="true"] { border-color: transparent; }
+  html:has(.page-index) { scroll-padding-top: 76px; } /* below the top bar */
 }
 @media (max-width: 640px) {
   .model-files code { flex-basis: 100%; }  /* the file name on its own line, its size and license below */

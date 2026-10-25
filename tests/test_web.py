@@ -161,6 +161,26 @@ def test_settings_says_when_only_this_computer_can_open_the_app(client, cfg):
     assert "Só este computador consegue acessar o sistema." in text
 
 
+def _index(text):
+    """Where the list beside the menu jumps to."""
+    return re.findall(r'<a href="#([\w-]+)" data-for="\1">', text)
+
+
+def test_settings_lists_its_parts_beside_the_menu(app, client):
+    general, models = client.get("/settings").text, client.get("/settings/models").text
+    assert "Nesta página" in general and "Nesta página" in models
+    assert _index(general) == ["identity", "accounts", "system", "data"]
+    assert _index(models)[0] == "model-faces" and _index(models)[-1] == "planned"  # each model, then Coming soon
+    assert len(_index(models)) == models.count('class="panel model-card"') + 1
+    for text in (general, models):
+        assert all(f'id="{part}"' in text for part in _index(text))
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with TestClient(app) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        assert _index(cashier.get("/settings").text) == ["identity", "accounts", "system"]  # no Database
+
+
 @pytest.fixture
 def opened(monkeypatch):
     """Folders the Settings button showed, instead of showing them on the screen."""
@@ -548,6 +568,7 @@ def test_today_shows_every_camera_with_a_model_or_turned_on(client, app):
     app.state.services.vision = OnlineVision()
     today = client.get("/").text
     assert "Caixa" in today and "Fundos" in today and "Porta" in today and "Garagem" not in today
+    assert _index(today) == ["camera-4", "camera-1", "camera-2"]  # beside the menu, the door first as on Cameras
     assert re.search(r"Pessoa<span>2</span>.*Mesa<span>1</span>", today, re.S)  # what it found, the most first
     assert "Encontrado hoje" in today and "Só a imagem ao vivo" in today and "Iniciar gravação" in today
     assert today.count('data-stream-for="') == 2  # a few cameras play as video

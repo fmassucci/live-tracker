@@ -15,11 +15,11 @@
 
   {% if index %}
   {# Beside the menu: a list of the cameras that jumps to each, and follows the one in view. #}
-  <nav class="camera-index" aria-label="{{ t('Cameras on this page') }}" data-camera-index>
-    <p class="camera-index-title">{{ t("Cameras") }}</p>
+  <nav class="page-index" aria-label="{{ t('Cameras on this page') }}" data-page-index>
+    <p class="page-index-title">{{ t("Cameras") }}</p>
     <ul>
       {% for c in cameras %}
-      <li><a href="#camera-{{ c.id }}" data-for="camera-{{ c.id }}"><span class="camera-index-name">{{ c.name }}</span>{% include "_today_index_count.html" %}</a></li>
+      <li><a href="#camera-{{ c.id }}" data-for="camera-{{ c.id }}"><span class="page-index-name">{{ c.name }}</span>{% include "_today_index_count.html" %}</a></li>
       {% endfor %}
     </ul>
   </nav>

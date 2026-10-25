@@ -86,13 +86,13 @@
     for (const row of document.querySelectorAll("[data-keep-scroll]")) row.scrollLeft = scrolled[row.dataset.keepScroll] ?? 0;
   });
 
-  // Today's list of cameras, beside the menu, follows the camera in view; a click jumps to one (a plain link,
-  // smooth by the stylesheet). While the page glides past other cameras, the list keeps the chosen one.
-  const index = document.querySelector("[data-camera-index]");
+  // A page's own index, beside the menu (Today's cameras, the parts of Settings), follows the part in view; a click
+  // jumps to one (a plain link, smooth by the stylesheet). While the page glides past other parts, the index keeps
+  // the chosen one. Each part is found by its id every time: one can be replaced while the page is open, such as an
+  // AI model's card while it downloads.
+  const index = document.querySelector("[data-page-index]");
   if (index) {
     const links = [...index.querySelectorAll("a[data-for]")];
-    const rows = links.map((link) => document.getElementById(link.dataset.for)).filter(Boolean);
-    const inView = new Set();
     let quietUntil = 0;
     const mark = (id) => {
       for (const link of links) {
@@ -100,28 +100,27 @@
         else link.removeAttribute("aria-current");
       }
     };
+    const inView = (part) => { // a part counts once it reaches the upper half of the window
+      const box = part.getBoundingClientRect();
+      return box.bottom > 80 && box.top < window.innerHeight * 0.55;
+    };
     const pick = () => {
       if (performance.now() < quietUntil) return;
-      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 24;
-      const row = atBottom ? rows[rows.length - 1] : rows.find((r) => inView.has(r.id)); // the last can't climb higher
-      if (row) mark(row.id);
+      const parts = links.map((link) => document.getElementById(link.dataset.for)).filter(Boolean);
+      const end = document.documentElement.scrollHeight - window.innerHeight; // as far as the page scrolls
+      const atBottom = window.scrollY > 0 && window.scrollY >= end - 24; // there, the last part can't climb higher
+      const part = atBottom ? parts[parts.length - 1] : parts.find(inView);
+      if (part) mark(part.id);
     };
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) inView.add(entry.target.id);
-        else inView.delete(entry.target.id);
-      }
-      pick();
-    }, { rootMargin: "-80px 0px -45% 0px" }); // a camera counts once it reaches the upper half of the window
-    rows.forEach((row) => observer.observe(row));
     window.addEventListener("scroll", pick, { passive: true });
+    window.addEventListener("resize", pick);
     for (const link of links) {
       link.addEventListener("click", () => {
         mark(link.dataset.for);
         quietUntil = performance.now() + 900;
       });
     }
-    mark(location.hash.slice(1) || rows[0]?.id);
+    pick();
   }
 
   // Camera pictures: a fresh one every few seconds, or as often as the picture asks (data-every, in ms).

@@ -8,6 +8,19 @@
 </div>
 {{ settings_tabs("general", t) }}
 
+{# Beside the menu: a list of this page's parts that jumps to each, and follows the one in view. #}
+<nav class="page-index" aria-label="{{ t('On this page') }}" data-page-index>
+  <p class="page-index-title">{{ t("On this page") }}</p>
+  <ul>
+    <li><a href="#identity" data-for="identity"><span class="page-index-name">{{ t("Name and logo") }}</span></a></li>
+    <li><a href="#accounts" data-for="accounts"><span class="page-index-name">{{ t("Accounts") }}</span></a></li>
+    <li><a href="#system" data-for="system"><span class="page-index-name">{{ t("System") }}</span></a></li>
+    {% if is_admin %}
+    <li><a href="#data" data-for="data"><span class="page-index-name">{{ t("Database") }}</span></a></li>
+    {% endif %}
+  </ul>
+</nav>
+
 <div class="settings">
   <section class="settings-block" id="identity">
     <div>
