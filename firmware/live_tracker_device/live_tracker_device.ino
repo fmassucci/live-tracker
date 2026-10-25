@@ -1,4 +1,4 @@
-// Portaria device: an ESP32 whose relays and inputs are driven over MQTT.
+// Live Tracker device: an ESP32 whose relays and inputs are driven over MQTT.
 //
 // The messages are described in ../README.md. Needs two libraries from the Arduino Library Manager:
 // PubSubClient (Nick O'Leary) and ArduinoJson 7 (Benoit Blanchon).
@@ -63,7 +63,7 @@ const uint32_t DEBOUNCE_MS = 50;
 WiFiClient net;
 PubSubClient mqtt(net);
 String deviceId;  // esp32-<last 6 hex digits of the MAC>, unique and stable
-String prefix;    // portaria/<deviceId>/
+String prefix;    // live-tracker/<deviceId>/
 uint32_t lastTry = 0;
 uint32_t lastHealth = 0;
 String doneIds[8];  // the last commands run: MQTT may deliver one twice, and a pulse must run once
@@ -162,7 +162,7 @@ bool alreadyDone(const String& id) {
   return false;
 }
 
-// A command arrives on portaria/<deviceId>/out/<key>/set, as {"id": "...", "action": "pulse", "ms": 3000}.
+// A command arrives on live-tracker/<deviceId>/out/<key>/set, as {"id": "...", "action": "pulse", "ms": 3000}.
 void onMessage(char* topic, byte* payload, unsigned int length) {
   String t(topic);
   String head = prefix + "out/";
@@ -292,7 +292,7 @@ void setup() {
   char id[16];
   snprintf(id, sizeof(id), "esp32-%02x%02x%02x", mac[3], mac[4], mac[5]);
   deviceId = id;
-  prefix = String("portaria/") + deviceId + "/";
+  prefix = String("live-tracker/") + deviceId + "/";
   Serial.printf("device %s\n", id);
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);

@@ -6,14 +6,14 @@ open to the broker, and so does the app. Messages travel both ways over these co
 milliseconds, and nobody polls.
 
 ```
-ESP32 board ──connection──▶ Mosquitto on the server ◀──connection── Portaria
+ESP32 board ──connection──▶ Mosquitto on the server ◀──connection── Live Tracker
 ```
 
 - **The board needs the server's IP**, set in its firmware, plus the broker login. The app never needs a
   board's IP: the board connects outward, so a new address after a restart breaks nothing.
 - **The app finds boards by itself.** A board announces what it has when it connects, the app lists it
   as a new device, and you name it there.
-- `portaria_device/portaria_device.ino` is a working example: two relays and a button. Change the
+- `live_tracker_device/live_tracker_device.ino` is a working example: two relays and a button. Change the
   settings at its top and the lists of outputs and inputs to match your wiring.
 
 ## Server: install the broker
@@ -21,7 +21,7 @@ ESP32 board ──connection──▶ Mosquitto on the server ◀──connectio
 1. Install Mosquitto from mosquitto.org (Windows installer). It runs as the Windows service "Mosquitto Broker".
 2. Create two logins, one for the app and one shared by the boards, in the Mosquitto folder:
    ```
-   mosquitto_passwd -c passwd portaria
+   mosquitto_passwd -c passwd live-tracker
    mosquitto_passwd passwd device
    ```
 3. Write `mosquitto.conf` in the same folder:
@@ -33,10 +33,10 @@ ESP32 board ──connection──▶ Mosquitto on the server ◀──connectio
    ```
    And the `acl` file, so each board can only use its own topics:
    ```
-   user portaria
-   topic readwrite portaria/#
+   user live-tracker
+   topic readwrite live-tracker/#
 
-   pattern readwrite portaria/%c/#
+   pattern readwrite live-tracker/%c/#
    ```
    `%c` is the board's client ID, which the example firmware sets to its device ID.
 4. Restart the service (`net stop mosquitto` then `net start mosquitto`, as administrator), and allow TCP
@@ -45,7 +45,7 @@ ESP32 board ──connection──▶ Mosquitto on the server ◀──connectio
 ## Topics and messages
 
 Every board has a device ID: `esp32-` plus the last six hex digits of its MAC, such as `esp32-a1b2c3`.
-All of its topics start with `portaria/<device>/`.
+All of its topics start with `live-tracker/<device>/`.
 
 | Topic | From | Kept by the broker | Message |
 |---|---|---|---|
@@ -107,13 +107,13 @@ The board answers on `ack` and reports the new state on `out/<key>/state`.
 With Mosquitto installed, watch everything, in PowerShell from the Mosquitto folder:
 
 ```
-.\mosquitto_sub -h 127.0.0.1 -u portaria -P <password> -t "portaria/#" -v
+.\mosquitto_sub -h 127.0.0.1 -u live-tracker -P <password> -t "live-tracker/#" -v
 ```
 
 Pulse relay 1 of a board for 2 seconds, from a second window:
 
 ```
-.\mosquitto_pub -h 127.0.0.1 -u portaria -P <password> -q 1 -t "portaria/esp32-a1b2c3/out/relay1/set" -m '{"id":"t1","action":"pulse","ms":2000}'
+.\mosquitto_pub -h 127.0.0.1 -u live-tracker -P <password> -q 1 -t "live-tracker/esp32-a1b2c3/out/relay1/set" -m '{"id":"t1","action":"pulse","ms":2000}'
 ```
 
 The first window shows `state` going `on`, then `off` 2 seconds later, and the `ack`. The board's serial
