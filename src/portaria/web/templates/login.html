@@ -10,11 +10,18 @@
 </head>
 <body>
 <main class="login">
-  <div class="login-box">
-    <div class="login-brand">
+  {# The bakery's logo inside the marks the live video draws around a face it recognizes. #}
+  <div class="login-brand">
+    <span class="login-logo">
       {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
-      <span>{{ brand.name }}</span>
-    </div>
+      <svg class="login-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 24V2h22M76 2h22v22M98 76v22H76M24 98H2V76"/>
+      </svg>
+    </span>
+    <p class="login-name">{{ brand.name }}</p>
+  </div>
+
+  <div class="login-box">
     <h1>{{ t("Sign in") }}</h1>
     <p>{{ t("Use the account created for you.") }}</p>
     {% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
@@ -30,14 +37,13 @@
       </div>
       <button class="button">{{ t("Sign in") }}</button>
     </form>
-    <div class="login-lang">
-      <form method="post" action="/language" class="lang-switch">
-        <input type="hidden" name="next" value="/login?next={{ next | urlencode }}">
-        <button name="lang" value="pt" aria-pressed="{{ 'true' if lang == 'pt' else 'false' }}">Português</button>
-        <button name="lang" value="en" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}">English</button>
-      </form>
-    </div>
   </div>
+
+  <form method="post" action="/language" class="lang-switch login-lang">
+    <input type="hidden" name="next" value="/login?next={{ next | urlencode }}">
+    <button name="lang" value="pt" aria-pressed="{{ 'true' if lang == 'pt' else 'false' }}">Português</button>
+    <button name="lang" value="en" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}">English</button>
+  </form>
 </main>
 </body>
 </html>
