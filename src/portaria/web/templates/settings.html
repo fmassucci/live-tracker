@@ -64,6 +64,11 @@
           <details>
             <summary><span>{{ u.username }}</span>{{ facts }}<span class="button button-quiet button-small">{{ icon("pencil") }}{{ t("Edit") }}</span></summary>
             <form method="post" action="/settings/users/{{ u.id }}" class="user-edit">
+              <div class="field">
+                <label for="username-{{ u.id }}">{{ t("User name") }}</label>
+                <input type="text" id="username-{{ u.id }}" name="username" value="{{ u.username }}" required minlength="3" maxlength="60" autocomplete="off" autocapitalize="none" spellcheck="false">
+                <span class="hint">{{ t("If you change it, the person signs in again with the new name.") }}</span>
+              </div>
               <label class="check">
                 <input type="checkbox" name="administrator" value="true" {% if u.is_admin %}checked{% endif %}>
                 <span>{{ t("Administrator") }}<span class="hint">{{ t("Can add accounts, and download and delete records.") }}</span></span>

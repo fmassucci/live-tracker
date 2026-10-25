@@ -64,15 +64,31 @@ def is_admin(session: Session, username: str) -> bool:
 
 def create_user(session: Session, username: str, password: str, *, admin: bool = False) -> User:
     username = username.strip()
-    if not _USERNAME.match(username):
-        raise AccountError("Use 3 to 60 letters, numbers, dots or dashes for the user name.")
+    _check_username(session, username)
     if len(password) < MIN_PASSWORD_LENGTH:
         raise AccountError("The password needs at least 8 characters.")
-    if session.scalar(select(User).where(User.username == username)):
-        raise AccountError("This user name is already taken.")
     user = User(username=username, password_hash=hash_password(password), is_admin=admin)
     session.add(user)
     return user
+
+
+def rename_user(session: Session, user: User, username: str) -> None:
+    """The person signs in with the new name from then on; their open sessions end. The audit log keeps the old
+    name in its past entries."""
+    username = username.strip()
+    if username != user.username:
+        _check_username(session, username, user)
+        user.username = username
+
+
+def _check_username(session: Session, username: str, account: User | None = None) -> None:
+    """A name that differs from another account's only in upper and lower case is taken too: people would mix
+    them up, and sign in with the wrong one."""
+    if not _USERNAME.match(username):
+        raise AccountError("Use 3 to 60 letters, numbers, dots or dashes for the user name.")
+    others = select(User.username).where(User.id != account.id) if account else select(User.username)
+    if any(name.casefold() == username.casefold() for name in session.scalars(others)):
+        raise AccountError("This user name is already taken.")
 
 
 def set_password(session: Session, username: str, password: str) -> None:

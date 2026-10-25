@@ -104,8 +104,10 @@ python -m portaria web
 Sign in at http://127.0.0.1:8000 with user `admin`, password `admin`. That account is created on the
 first start; every page reminds you to change its password (Settings, Accounts) until you do. More accounts
 can be added in Settings, or with `python -m portaria create-user <name>`. Only administrators add accounts,
-edit the others (administrator or not, a new password) or remove them, and see Settings, Database. `admin` is
-one, and so is every account made before administrators existed. At least one administrator always remains.
+edit the others (user name, administrator or not, a new password) or remove them, and see Settings, Database.
+`admin` is one, and so is every account made before administrators existed. At least one administrator always
+remains. A user name can't be one another account has, even in other upper and lower case; a renamed person
+signs in again with the new name.
 
 Phones, tablets and other computers on the same network open it at the address shown in Settings (System)
 and printed by `web` when it starts, such as http://192.168.0.10:8000. The first time, Windows Firewall asks

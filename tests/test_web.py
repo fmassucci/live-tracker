@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from portaria.db import STOP_REQUESTS, AuditEntry, Camera, Event, Person, User, get_setting
 from portaria.events import face_path
-from portaria.users import authenticate, create_user, is_admin
+from portaria.users import authenticate, create_user, is_admin, user_exists
 from portaria.web.app import create_app
 from portaria.web.common import recording_state
 
@@ -296,6 +296,29 @@ def test_an_administrator_edits_and_removes_the_other_accounts(app, client):
     # Your own account changes in Change my password, and you can't remove it yourself.
     assert client.post(f"/settings/users/{admin_id}", data={"password": "outra-senha-1"}).status_code == 403
     assert client.post(f"/settings/users/{admin_id}/delete", data={"confirm": "true"}).status_code == 403
+
+
+def test_an_administrator_renames_an_account_to_a_name_nobody_has(app, client):
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+        create_user(session, "gerente", "senha-do-gerente")
+    with app.state.services.db.session() as session:
+        cashier_id = session.scalar(select(User.id).where(User.username == "caixa"))
+    assert 'name="username" value="caixa"' in client.get("/settings").text
+    with TestClient(app) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        taken = client.post(f"/settings/users/{cashier_id}", data={"username": "Gerente", "password": "nova-senha-1"})
+        assert "Este nome de usuário já existe." in taken.text
+        with app.state.services.db.session() as session:  # nothing was saved, not even the password
+            assert authenticate(session, "caixa", "senha-do-caixa")
+        renamed = client.post(f"/settings/users/{cashier_id}", data={"username": " caixa.ana "})
+        assert "Conta caixa.ana salva." in renamed.text
+        assert cashier.get("/people", follow_redirects=False).status_code == 303  # signs in again, with the new name
+    with app.state.services.db.session() as session:
+        assert authenticate(session, "caixa.ana", "senha-do-caixa") and not user_exists(session, "caixa")
+        changes = session.scalars(select(AuditEntry.detail).where(AuditEntry.action == "account changed")).all()
+        assert changes == ["caixa: renamed to caixa.ana"]
+    assert "Use de 3 a 60 letras" in client.post(f"/settings/users/{cashier_id}", data={"username": "a b"}).text
 
 
 def _record(app, cfg, at: datetime, kind: str = "recognized", name: str | None = "Ana") -> str:

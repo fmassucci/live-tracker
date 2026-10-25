@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from portaria.db import STOP_REQUESTS, Camera, User, audit, bump, get_setting, set_setting
-from portaria.users import AccountError, create_user, is_admin, remove_user, set_admin, set_password
+from portaria.users import AccountError, create_user, is_admin, remove_user, rename_user, set_admin, set_password
 from portaria.web.common import (
     flash, on_this_computer, page, require_admin, require_user, services, web_addresses,
 )
@@ -176,10 +176,11 @@ def change_password(request: Request, password: str = Form(""), password_again: 
 
 @admin.post("/settings/users/{user_id}")
 def edit_user(
-    request: Request, user_id: int, administrator: bool = Form(False), password: str = Form(""),
-    user: str = Depends(require_admin),
+    request: Request, user_id: int, username: str = Form(""), administrator: bool = Form(False),
+    password: str = Form(""), user: str = Depends(require_admin),
 ) -> RedirectResponse:
-    """Another account's role, and a new password when the person forgot theirs."""
+    """Another account's name and role, and a new password when the person forgot theirs. Nothing is saved when
+    any of it can't be, such as a name another account has."""
     try:
         with services(request).db.session() as session:
             account = _other_account(session, user_id, user)
@@ -190,8 +191,12 @@ def edit_user(
             if password:
                 set_password(session, name, password)
                 changes.append("new password")
+            if username.strip() and username.strip() != name:
+                rename_user(session, account, username)
+                changes.append(f"renamed to {account.username}")
             if changes:
                 audit(session, user, "account changed", f"{name}: {', '.join(changes)}")
+            name = account.username
     except AccountError as e:
         flash(request, str(e), "bad")
     else:
