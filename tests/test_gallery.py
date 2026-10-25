@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from portaria.gallery import Gallery, closest_pair
+from live_tracker.gallery import Gallery, closest_pair
 
 
 def _unit(*values: float) -> np.ndarray:

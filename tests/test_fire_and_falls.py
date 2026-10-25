@@ -8,16 +8,16 @@ from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from portaria import service
-from portaria.camera import Frame
-from portaria.db import Camera, Event
-from portaria.falls import FallDetector, FallSettings, lying
-from portaria.fire import FireDetector, FireSettings
-from portaria.objects import Detection, ObjectAnalyzer, ObjectSettings, Sighting
-from portaria.pipeline import Result
-from portaria.service import CameraSpec, VisionService
-from portaria.web.app import create_app
-from portaria.yolo import Found, decode, decode_end2end
+from live_tracker import service
+from live_tracker.camera import Frame
+from live_tracker.db import Camera, Event
+from live_tracker.falls import FallDetector, FallSettings, lying
+from live_tracker.fire import FireDetector, FireSettings
+from live_tracker.objects import Detection, ObjectAnalyzer, ObjectSettings, Sighting
+from live_tracker.pipeline import Result
+from live_tracker.service import CameraSpec, VisionService
+from live_tracker.web.app import create_app
+from live_tracker.yolo import Found, decode, decode_end2end
 
 PAD = np.array([0, 140], np.float32)  # a 1280x720 picture in a 640 square: half size, 140 px of grey above
 

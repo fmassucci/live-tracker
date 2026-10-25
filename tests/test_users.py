@@ -4,8 +4,8 @@ from sqlalchemy import select, text
 
 import pytest
 
-from portaria.db import MIGRATIONS_DIR, Database, User
-from portaria.users import (
+from live_tracker.db import MIGRATIONS_DIR, Database, User
+from live_tracker.users import (
     AccountError, create_user, ensure_default_user, is_admin, remove_user, rename_user, set_admin,
 )
 

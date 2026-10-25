@@ -11,11 +11,11 @@ from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from portaria.db import STOP_REQUESTS, AuditEntry, Camera, Event, Person, User, get_setting
-from portaria.events import face_path
-from portaria.users import authenticate, create_user, is_admin, user_exists
-from portaria.web.app import create_app
-from portaria.web.common import recording_state
+from live_tracker.db import STOP_REQUESTS, AuditEntry, Camera, Event, Person, User, get_setting
+from live_tracker.events import face_path
+from live_tracker.users import authenticate, create_user, is_admin, user_exists
+from live_tracker.web.app import create_app
+from live_tracker.web.common import recording_state
 
 
 class NoVision:
@@ -138,7 +138,7 @@ def test_logo_upload_is_stored_as_png_and_shown(client, cfg):
 
 
 def test_settings_shows_the_addresses_to_open_the_app(client, monkeypatch):
-    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19", "10.0.0.5"])
+    monkeypatch.setattr("live_tracker.web.common.local_ipv4", lambda: ["192.168.0.19", "10.0.0.5"])
     text = client.get("/settings").text
     assert 'value="http://127.0.0.1:8000"' in text
     assert 'value="http://192.168.0.19:8000"' in text and 'value="http://10.0.0.5:8000"' in text
@@ -146,7 +146,7 @@ def test_settings_shows_the_addresses_to_open_the_app(client, monkeypatch):
 
 
 def test_the_door_screen_address_is_the_one_the_tablet_opens(client, app, monkeypatch):
-    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19"])
+    monkeypatch.setattr("live_tracker.web.common.local_ipv4", lambda: ["192.168.0.19"])
     with app.state.services.db.session() as session:
         session.add(Camera(name="Porta", url="0", device="door"))
         session.flush()
@@ -185,8 +185,8 @@ def test_settings_lists_its_parts_beside_the_menu(app, client):
 def opened(monkeypatch):
     """Folders the Settings button showed, instead of showing them on the screen."""
     folders = []
-    monkeypatch.setattr("portaria.web.data.open_folder", folders.append)
-    monkeypatch.setattr("portaria.web.common.local_ipv4", lambda: ["192.168.0.19"])
+    monkeypatch.setattr("live_tracker.web.data.open_folder", folders.append)
+    monkeypatch.setattr("live_tracker.web.common.local_ipv4", lambda: ["192.168.0.19"])
     return folders
 
 
@@ -247,7 +247,7 @@ def stops(app, monkeypatch):
     """Each time Stop the system stopped the web UI."""
     stopped = []
     app.state.services.stop_web = lambda: stopped.append(True)
-    monkeypatch.setattr("portaria.web.settings.WEB_STOP_DELAY_S", 0)
+    monkeypatch.setattr("live_tracker.web.settings.WEB_STOP_DELAY_S", 0)
     return stopped
 
 
@@ -266,7 +266,7 @@ def test_stop_the_system_stops_the_service_and_then_the_web_ui(app, stops):
 
 
 def test_stopping_says_when_the_service_takes_a_while(app, stops, monkeypatch):
-    monkeypatch.setattr("portaria.web.settings.SERVICE_STOP_WAIT_S", 0)
+    monkeypatch.setattr("live_tracker.web.settings.SERVICE_STOP_WAIT_S", 0)
     with TestClient(app, client=("127.0.0.1", 50000)) as here:
         here.post("/login", data={"username": "admin", "password": "admin"})
         app.state.services.vision = StoppingVision(answers=100)

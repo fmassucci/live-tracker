@@ -10,11 +10,11 @@ import pytest
 import uvicorn
 from conftest import free_port
 
-from portaria import cli
-from portaria.cli import main
-from portaria.preview import PreviewServer
-from portaria.service import VisionService
-from portaria.web.vision_client import VisionClient
+from live_tracker import cli
+from live_tracker.cli import main
+from live_tracker.preview import PreviewServer
+from live_tracker.service import VisionService
+from live_tracker.web.vision_client import VisionClient
 
 
 def _config_file(tmp_path, cfg, web_port: int) -> str:

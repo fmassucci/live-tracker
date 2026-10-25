@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 
-from portaria.config import DetectionConfig
-from portaria.faces import ARCFACE_TEMPLATE, TURNED_AWAY, Face, assess, similarity_transform, upright, yaw
+from live_tracker.config import DetectionConfig
+from live_tracker.faces import ARCFACE_TEMPLATE, TURNED_AWAY, Face, assess, similarity_transform, upright, yaw
 
 
 def _rotation(degrees: float) -> np.ndarray:

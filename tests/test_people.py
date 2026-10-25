@@ -2,10 +2,10 @@ import numpy as np
 from conftest import textured
 from sqlalchemy import func, select
 
-from portaria.db import FACES_VERSION, Embedding, Event, Person, Photo, get_setting
-from portaria.decision import Decision
-from portaria.events import EventLog, purge_events
-from portaria.people import door_allowed, load_gallery
+from live_tracker.db import FACES_VERSION, Embedding, Event, Person, Photo, get_setting
+from live_tracker.decision import Decision
+from live_tracker.events import EventLog, purge_events
+from live_tracker.people import door_allowed, load_gallery
 
 
 def _person(session, name: str, **fields) -> Person:

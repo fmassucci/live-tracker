@@ -10,9 +10,9 @@ import pytest
 from conftest import FakeTools, place_model_file, publish_model_file
 from fastapi.testclient import TestClient
 
-from portaria.db import Camera, Event
-from portaria.models import Downloads, file_state, model_state
-from portaria.web.app import create_app
+from live_tracker.db import Camera, Event
+from live_tracker.models import Downloads, file_state, model_state
+from live_tracker.web.app import create_app
 
 
 class NoVision:

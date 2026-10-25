@@ -4,11 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from portaria.camera import Frame
-from portaria.objects import (
+from live_tracker.camera import Frame
+from live_tracker.objects import (
     KEYS, Detection, ObjectAnalyzer, ObjectDetector, ObjectSettings, Presence, anchors, decode,
 )
-from portaria.recording import APPEAR, INTERVAL, RecordGate, RecordRule, thing
+from live_tracker.recording import APPEAR, INTERVAL, RecordGate, RecordRule, thing
 
 GRIDS, STRIDES = anchors(640)
 

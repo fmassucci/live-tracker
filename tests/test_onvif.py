@@ -1,5 +1,5 @@
-from portaria import onvif
-from portaria.camera import redact
+from live_tracker import onvif
+from live_tracker.camera import redact
 
 CAPABILITIES = """<?xml version="1.0" encoding="UTF-8"?>
 <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tt="http://www.onvif.org/ver10/schema">

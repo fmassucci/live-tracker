@@ -5,12 +5,12 @@ import threading
 import numpy as np
 import pytest
 
-from portaria import models
-from portaria.config import Config
-from portaria.db import Database
-from portaria.faces import ARCFACE_TEMPLATE, Face
-from portaria.models import ModelFile
-from portaria.people import People
+from live_tracker import models
+from live_tracker.config import Config
+from live_tracker.db import Database
+from live_tracker.faces import ARCFACE_TEMPLATE, Face
+from live_tracker.models import ModelFile
+from live_tracker.people import People
 
 
 def publish_model_file(monkeypatch, key: str, content: bytes, url: str = "http://example.invalid/model.onnx") -> None:

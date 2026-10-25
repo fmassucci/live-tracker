@@ -7,12 +7,12 @@ import pytest
 from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 
-from portaria import service
-from portaria.db import Camera
-from portaria.dfine import DFineDetector, decode, threshold
-from portaria.objects import ObjectAnalyzer, ObjectSettings
-from portaria.service import CameraSpec, VisionService, thing_model
-from portaria.web.app import create_app
+from live_tracker import service
+from live_tracker.db import Camera
+from live_tracker.dfine import DFineDetector, decode, threshold
+from live_tracker.objects import ObjectAnalyzer, ObjectSettings
+from live_tracker.service import CameraSpec, VisionService, thing_model
+from live_tracker.web.app import create_app
 
 
 def test_answers_become_things_in_the_picture():

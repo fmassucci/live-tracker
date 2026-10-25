@@ -1,5 +1,5 @@
-from portaria.config import DecisionConfig
-from portaria.decision import DecisionMaker, Observation
+from live_tracker.config import DecisionConfig
+from live_tracker.decision import DecisionMaker, Observation
 
 CONFIG = DecisionConfig(
     window_s=1.5, min_votes=3, rearm_after_s=1.0, person_cooldown_s=5.0, unknown_cooldown_s=10.0, unknown_after_s=2.0

@@ -8,9 +8,9 @@ import ast
 import re
 from pathlib import Path
 
-from portaria import faces, falls, fire, i18n, objects, pipeline
+from live_tracker import faces, falls, fire, i18n, objects, pipeline
 
-SRC = Path(__file__).parents[1] / "src" / "portaria"
+SRC = Path(__file__).parents[1] / "src" / "live_tracker"
 TEMPLATE_KEY = re.compile(r"""\bt\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
 PYTHON_FILES = [*sorted((SRC / "web").glob("*.py")), SRC / "users.py", SRC / "importer.py"]
 

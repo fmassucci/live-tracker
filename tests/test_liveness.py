@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 from conftest import FakeDetector, FakeEmbedder, place_model_file, textured
 
-from portaria import service
-from portaria.camera import Frame
-from portaria.gallery import Gallery
-from portaria.liveness import MiniFASNet, NoLiveness, crop, load_liveness
-from portaria.pipeline import Recognizer
-from portaria.service import VisionService
+from live_tracker import service
+from live_tracker.camera import Frame
+from live_tracker.gallery import Gallery
+from live_tracker.liveness import MiniFASNet, NoLiveness, crop, load_liveness
+from live_tracker.pipeline import Recognizer
+from live_tracker.service import VisionService
 
 
 def test_the_crop_keeps_its_size_and_moves_inside_the_picture():

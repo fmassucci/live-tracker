@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-from portaria.db import Camera, Event, Person
-from portaria.recording import (
+from live_tracker.db import Camera, Event, Person
+from live_tracker.recording import (
     APPEAR, DAILY, INTERVAL, RecordGate, RecordRule, decision_subject, last_recorded, person, thing,
 )
 

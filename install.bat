@@ -48,7 +48,7 @@ if not exist config.toml (
 )
 
 echo Downloading the face models that are missing
-.venv\Scripts\python.exe -m portaria download-models || goto failed
+.venv\Scripts\python.exe -m live_tracker download-models || goto failed
 
 rem Portaria.bat on the desktop runs start.bat from this folder
 set "DESKTOP="

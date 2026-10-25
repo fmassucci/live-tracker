@@ -5,15 +5,15 @@ import numpy as np
 import pytest
 from sqlalchemy import select
 
-from portaria import service
-from portaria.camera import Frame
-from portaria.db import MODELS_VERSION, STOP_REQUESTS, Event, bump
-from portaria.db import Camera as CameraRow
-from portaria.decision import Decision
-from portaria.pipeline import Result
-from portaria.objects import ObjectAnalyzer, Sighting
-from portaria.recording import DAILY, INTERVAL, RecordGate, RecordRule, thing
-from portaria.service import CameraSpec, VisionService
+from live_tracker import service
+from live_tracker.camera import Frame
+from live_tracker.db import MODELS_VERSION, STOP_REQUESTS, Event, bump
+from live_tracker.db import Camera as CameraRow
+from live_tracker.decision import Decision
+from live_tracker.pipeline import Result
+from live_tracker.objects import ObjectAnalyzer, Sighting
+from live_tracker.recording import DAILY, INTERVAL, RecordGate, RecordRule, thing
+from live_tracker.service import CameraSpec, VisionService
 
 
 class FakeSource:

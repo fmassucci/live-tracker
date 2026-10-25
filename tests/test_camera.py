@@ -4,7 +4,7 @@ import threading
 
 import numpy as np
 
-from portaria.camera import Frame, part_of, probe
+from live_tracker.camera import Frame, part_of, probe
 
 SDP = ("v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=Camera\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n"
        "m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=control:trackID=0\r\n")

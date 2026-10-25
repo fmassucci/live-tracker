@@ -1,6 +1,6 @@
 import pytest
 
-from portaria.config import Config, load_config
+from live_tracker.config import Config, load_config
 
 
 def test_missing_file_gives_the_defaults(tmp_path):

@@ -10,5 +10,5 @@ if not exist .venv\Scripts\python.exe (
     pause
     exit /b 1
 )
-.venv\Scripts\python.exe -m portaria start
+.venv\Scripts\python.exe -m live_tracker start
 if errorlevel 1 pause

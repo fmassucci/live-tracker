@@ -1,7 +1,7 @@
 import numpy as np
 
-from portaria.camera import Frame
-from portaria.pipeline import RateMeter, RepeatedFrames
+from live_tracker.camera import Frame
+from live_tracker.pipeline import RateMeter, RepeatedFrames
 
 IMAGE = np.zeros((8, 8, 3), np.uint8)
 
