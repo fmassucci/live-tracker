@@ -1,19 +1,19 @@
 @echo off
-rem Installs Portaria in this folder: a Python environment in .venv with Portaria and its libraries, config.toml
-rem and the face models. Then puts Portaria.bat on the desktop, which starts it. Run it again after an update:
-rem it keeps config.toml, the models and data\.
+rem Installs Live Tracker in this folder: a Python environment in .venv with Live Tracker and its libraries,
+rem config.toml and the face models. Then puts Live Tracker.bat on the desktop, which starts it. Run it again after
+rem an update: it keeps config.toml, the models and data\.
 setlocal
 set "HERE=%~dp0"
 cd /d "%HERE%"
 
 if not exist pyproject.toml (
-    echo Run install.bat from the Portaria folder. If it came as a .zip file, extract the whole folder first.
+    echo Run install.bat from the Live Tracker folder. If it came as a .zip file, extract the whole folder first.
     goto failed
 )
 
 echo "%HERE%" | findstr /i "onedrive" >nul && (
     echo This folder is in OneDrive, which would copy data\, with its face photos, to the cloud.
-    echo Move the folder out of OneDrive first, for example to C:\Portaria. To install here anyway, press a key.
+    echo Move the folder out of OneDrive first, for example to C:\live-tracker. To install here anyway, press a key.
     pause >nul
 )
 
@@ -39,7 +39,7 @@ rem A new environment, or a fresh one when the one there no longer works or has 
     %PYTHON% -m venv --clear --prompt live-tracker .venv || goto failed
 )
 
-echo Installing Portaria and its libraries. The first time, this takes a few minutes.
+echo Installing Live Tracker and its libraries. The first time, this takes a few minutes.
 .venv\Scripts\python.exe -m pip install --disable-pip-version-check -e . || goto failed
 
 if not exist config.toml (
@@ -50,20 +50,20 @@ if not exist config.toml (
 echo Downloading the face models that are missing
 .venv\Scripts\python.exe -m live_tracker download-models || goto failed
 
-rem Portaria.bat on the desktop runs start.bat from this folder
+rem Live Tracker.bat on the desktop runs start.bat from this folder
 set "DESKTOP="
 for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%d"
 if not defined DESKTOP set "DESKTOP=%USERPROFILE%\Desktop"
-set "LAUNCHER=%DESKTOP%\Portaria.bat"
+set "LAUNCHER=%DESKTOP%\Live Tracker.bat"
 (
     echo @echo off
-    echo rem Made by install.bat: starts Portaria from its folder. If the folder moves, run install.bat there again.
+    echo rem Made by install.bat: starts Live Tracker from its folder. If the folder moves, run install.bat there again.
     echo "%HERE%start.bat"
 ) > "%LAUNCHER%" || goto failed
 echo Created "%LAUNCHER%"
 
 echo.
-echo Portaria is installed. To start it, double-click Portaria on the desktop.
+echo Live Tracker is installed. To start it, double-click Live Tracker on the desktop.
 echo Then sign in with user admin and password admin, and change that password in Settings.
 pause
 exit /b 0

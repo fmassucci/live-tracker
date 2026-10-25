@@ -35,7 +35,7 @@
       <form method="post" action="/settings/identity" class="field">
         <label for="display_name">{{ t("Name shown") }}</label>
         <div class="copy-field">
-          <input type="text" id="display_name" name="display_name" value="{{ display_name }}" maxlength="60" placeholder="Portaria">
+          <input type="text" id="display_name" name="display_name" value="{{ display_name }}" maxlength="60" placeholder="Live Tracker">
           <button class="button">{{ t("Save") }}</button>
         </div>
       </form>
@@ -208,7 +208,7 @@
         <h3>{{ t("Stop the system") }}</h3>
         {% if on_this_computer %}
         <form method="post" action="/settings/stop">
-          <p class="hint" style="margin-bottom: 14px">{{ t("Stops recording on every camera and closes the system on every device. To start it again, double-click Portaria on the desktop.") }}</p>
+          <p class="hint" style="margin-bottom: 14px">{{ t("Stops recording on every camera and closes the system on every device. To start it again, double-click Live Tracker on the desktop.") }}</p>
           <label class="check"><input type="checkbox" name="confirm" value="true" required><span>{{ t("I understand nothing is recorded until it starts again") }}</span></label>
           <button class="button button-quiet" data-busy-text="{{ t('Stopping...') }}">{{ icon("power") }}{{ t("Stop the system") }}</button>
         </form>

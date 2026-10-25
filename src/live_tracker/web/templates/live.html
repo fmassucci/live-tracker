@@ -32,7 +32,7 @@
   {% elif state == "service-down" %}
   <div class="video-empty" data-waiting-for="{{ chosen.id }}">
     <p>{{ t("The recognition service is not running, so there is no image.") }}</p>
-    <p class="small">{{ t("To start it, double-click Portaria on the desktop of the computer where the system is installed.") }}</p>
+    <p class="small">{{ t("To start it, double-click Live Tracker on the desktop of the computer where the system is installed.") }}</p>
   </div>
   {% else %}
   <img src="/cameras/{{ chosen.id }}/stream" data-stream-for="{{ chosen.id }}" alt="{{ t('Live image from {name}', name=chosen.name) }}">

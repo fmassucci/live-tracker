@@ -117,7 +117,7 @@ def flash(request: Request, text: str, tone: str = "ok", **values: object) -> No
 
 def branding(s: Services) -> dict:
     with s.db.session() as session:
-        name = get_setting(session, "display_name") or "Portaria"
+        name = get_setting(session, "display_name") or "Live Tracker"
         logo_version = get_setting(session, "logo_version")
     return {"name": name, "logo": f"/branding/logo.png?v={logo_version}" if logo_version else None}
 
