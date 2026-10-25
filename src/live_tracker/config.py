@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import tomllib
+from contextlib import closing
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 RECOGNITION_MODELS = ("auraface", "sface")
+DB_NAME = "live-tracker.db"
+LEGACY_DB_NAME = "portaria.db"  # its name before the app was called Live Tracker
 
 # Keys from earlier versions that no longer do anything: skipped, so old config files keep working.
 _RETIRED = {("preview", "enabled")}
@@ -99,7 +103,9 @@ class Config:
 
     @property
     def db_path(self) -> Path:
-        return self.paths.data_dir / "portaria.db"
+        """The database. One still under the app's old name is used where it is, until `start` renames it."""
+        path, legacy = self.paths.data_dir / DB_NAME, self.paths.data_dir / LEGACY_DB_NAME
+        return legacy if legacy.exists() and not path.exists() else path
 
     @property
     def enroll_dir(self) -> Path:
@@ -128,3 +134,26 @@ def load_config(path: Path | None) -> Config:
                 raise ValueError(f"{path}: unknown key '{key}' in [{section_name}]")
             setattr(section, key, type(getattr(section, key))(value))
     return config
+
+
+def rename_legacy_database(cfg: Config) -> bool:
+    """Gives a database still under the app's old name the new one, while nothing uses it: `start` calls this
+    before starting anything. True when it was renamed.
+
+    Closing the last connection folds SQLite's journal (-wal, -shm) into the main file and deletes it, so the one
+    file left can move alone. When the journal stays, something still has the database open: it keeps its name.
+    """
+    path, legacy = cfg.paths.data_dir / DB_NAME, cfg.paths.data_dir / LEGACY_DB_NAME
+    if path.exists() or not legacy.exists():
+        return False
+    try:
+        with closing(sqlite3.connect(legacy)) as connection:
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        if any(legacy.with_name(legacy.name + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
+            return False
+        legacy.rename(path)
+    except (OSError, sqlite3.Error) as e:
+        log.warning("the database keeps its old name, %s, for now: %s", legacy.name, e)
+        return False
+    log.info("database renamed: %s is now %s", legacy.name, path.name)
+    return True

@@ -50,7 +50,7 @@ def test_a_name_another_account_has_is_taken_in_upper_or_lower_case(db):
 
 def test_accounts_from_before_administrators_existed_keep_their_access(tmp_path):
     """Everyone had the same access then, so they all become administrators."""
-    db = Database(tmp_path / "portaria.db")
+    db = Database(tmp_path / "live-tracker.db")
     alembic_cfg = AlembicConfig()
     alembic_cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
     alembic_cfg.set_main_option("sqlalchemy.url", db.url)

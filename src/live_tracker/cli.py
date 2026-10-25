@@ -17,7 +17,7 @@ import webbrowser
 from contextlib import suppress
 from pathlib import Path
 
-from live_tracker.config import RECOGNITION_MODELS, Config, load_config
+from live_tracker.config import RECOGNITION_MODELS, Config, load_config, rename_legacy_database
 
 START_TIMEOUT_S = 90.0  # for `start`: after the computer starts, loading the AI models can take a while
 CLOSE_AFTER_S = 5.0  # how long `start` still shows that the system runs, before its window closes
@@ -195,11 +195,13 @@ def _start(cfg: Config, args: argparse.Namespace) -> int:
     logs = cfg.paths.data_dir / "logs"
     answering = {"run": lambda: vision.status() is not None, "web": lambda: _answers(here)}
     names = {"run": "recognition service", "web": "web UI"}
+    missing = [command for command, answers in answering.items() if not answers()]
+    if len(missing) == len(answering):  # nothing runs, so nothing has the database open
+        rename_legacy_database(cfg)
     starting = {}
-    for command, answers in answering.items():
-        if not answers():
-            print(f"Starting the {names[command]}...")
-            starting[command] = _background(args, command, logs)
+    for command in missing:
+        print(f"Starting the {names[command]}...")
+        starting[command] = _background(args, command, logs)
     deadline = time.monotonic() + START_TIMEOUT_S
     while starting:
         for command, (process, log) in list(starting.items()):

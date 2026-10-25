@@ -84,6 +84,7 @@ class Launches:
 
     def __init__(self, running: set[str], failing: set[str]) -> None:
         self.started: list[str] = []
+        self.renamed = 0  # times the database under the old name was renamed
         self.running, self.failing = running, failing
 
     def background(self, args, command: str, logs: Path) -> tuple[SimpleNamespace, Path]:
@@ -105,6 +106,7 @@ def launches(monkeypatch):
         monkeypatch.setattr(cli, "_answers", lambda url: "web" in fake.running)
         monkeypatch.setattr(VisionClient, "status", lambda self: {} if "run" in fake.running else None)
         monkeypatch.setattr(cli, "CLOSE_AFTER_S", 0)
+        monkeypatch.setattr(cli, "rename_legacy_database", lambda config: setattr(fake, "renamed", fake.renamed + 1))
         return fake
 
     return install
@@ -117,6 +119,7 @@ def test_start_launches_both_in_the_background_and_opens_the_browser(tmp_path, c
     port = free_port()
     assert main(["--config", _config_file(tmp_path, cfg, port), "start"]) == 0
     assert fake.started == ["run", "web"]
+    assert fake.renamed == 1  # nothing ran, so nothing had the database open
     assert opened == [f"http://127.0.0.1:{port}"]
 
 
@@ -125,6 +128,7 @@ def test_start_only_launches_what_is_not_running(tmp_path, cfg, monkeypatch, lau
     fake = launches(running={"run"})
     assert main(["--config", _config_file(tmp_path, cfg, free_port()), "start"]) == 0
     assert fake.started == ["web"]
+    assert fake.renamed == 0  # the service has the database open
 
 
 def test_start_shows_why_a_program_did_not_start(tmp_path, cfg, monkeypatch, launches, capsys):
