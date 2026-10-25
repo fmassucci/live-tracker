@@ -10,10 +10,10 @@ camera would be accepted.
 
 ```
 IP camera ──RTSP──► recognition service ──── local port (video, status) ────► web UI ◄── browsers
-                    python -m portaria run                                     python -m portaria web
+                    live-tracker run                                          live-tracker web
                          │                                                          │
-                         └──────────────── data/portaria.db (SQLite) ───────────────┘
-                                           data/photos, data/snapshots
+                         └────────────── data/live-tracker.db (SQLite) ─────────────┘
+                                         data/photos, data/snapshots
 ```
 
 - **Recognition service** (`run`): reads every enabled camera from the database. Door cameras recognize people,
@@ -29,13 +29,13 @@ On Windows:
 1. Install Python 3.13, 64-bit: `winget install Python.Python.3.13`, or the Python install manager from
    https://www.python.org/downloads/ and then `py install 3.13`. Python 3.11 to 3.14 work too: those are the
    versions onnxruntime is built for.
-2. Put this folder where it will stay, outside OneDrive, such as `C:\Portaria`: `data\` will hold face photos,
+2. Put this folder where it will stay, outside OneDrive, such as `C:\live-tracker`: `data\` will hold face photos,
    which must not be copied to the cloud. With git:
-   `git clone https://github.com/fmassucci/padaria-cameras.git C:\Portaria`.
-3. Double-click `install.bat`. It creates the Python environment in `.venv` with Portaria and its libraries,
-   and `config.toml` from `config.example.toml`. It downloads the face models and puts **Portaria** on the
-   desktop (`Portaria.bat`, which runs `start.bat` from this folder). It needs the internet and takes a few
-   minutes the first time. Run it again after an update, with Portaria closed, or after moving the folder:
+   `git clone https://github.com/fmassucci/live-tracker.git C:\live-tracker`.
+3. Double-click `install.bat`. It creates the Python environment in `.venv` with Live Tracker and its libraries,
+   and `config.toml` from `config.example.toml`. It downloads the face models and puts **Live Tracker** on the
+   desktop (`Live Tracker.bat`, which runs `start.bat` from this folder). It needs the internet and takes a few
+   minutes the first time. Run it again after an update, with Live Tracker closed, or after moving the folder:
    it keeps `config.toml`, the models and `data\`.
 
 By hand, or on Linux, with the test tools:
@@ -44,7 +44,7 @@ By hand, or on Linux, with the test tools:
 py -3.13 -m venv .venv --prompt live-tracker
 .venv\Scripts\activate            # Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-python -m portaria download-models
+live-tracker download-models
 copy config.example.toml config.toml
 ```
 
@@ -84,7 +84,7 @@ second suit it. Its sensitivity levels have their own thresholds (`dfine.py`), s
 
 ## Run
 
-Double-click **Portaria** on the desktop, or `start.bat` in this folder (`python -m portaria start`). A window
+Double-click **Live Tracker** on the desktop, or `start.bat` in this folder (`live-tracker start`). A window
 shows the recognition service and the web UI starting, both in the background without windows of their own.
 Once they answer, the default browser opens the system and the window closes by itself. If one of them doesn't
 start, the window stays open with its last messages. Whatever already runs is left as it is, so double-clicking
@@ -97,13 +97,13 @@ on the computer that runs the system, since that's the only place to start it ag
 By hand, in two terminals:
 
 ```
-python -m portaria run
-python -m portaria web
+live-tracker run
+live-tracker web
 ```
 
 Sign in at http://127.0.0.1:8000 with user `admin`, password `admin`. That account is created on the
 first start; every page reminds you to change its password (Settings, Accounts) until you do. More accounts
-can be added in Settings, or with `python -m portaria create-user <name>`. Only administrators add accounts,
+can be added in Settings, or with `live-tracker create-user <name>`. Only administrators add accounts,
 edit the others (user name, administrator or not, a new password) or remove them, and see Settings, Database.
 `admin` is one, and so is every account made before administrators existed. At least one administrator always
 remains. A user name can't be one another account has, even in other upper and lower case; a renamed person
@@ -135,6 +135,8 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
 
 ## Command line
 
+`live-tracker <command>` in the activated environment, or `.venv\Scripts\python.exe -m live_tracker <command>`.
+
 | Command | Does |
 |---|---|
 | `run [--source URL]` | recognition service; `--source` uses only that camera, for tests; stops if one already runs |
@@ -150,7 +152,7 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
 ## Languages
 
 English is the source language: the English text in templates and code is the key, and
-`src/portaria/i18n/translation_cache.json` maps it to Portuguese (`{"pt": {"Today": "Hoje"}}`). A text without
+`src/live_tracker/i18n/translation_cache.json` maps it to Portuguese (`{"pt": {"Today": "Hoje"}}`). A text without
 a translation falls back to English. Data (names, numbers, file names) is never translated.
 
 `tests/test_i18n.py` fails when any text in the templates or code has no Portuguese translation, so new
@@ -160,7 +162,7 @@ to the catalog.
 ## Data and privacy
 
 ```
-data/portaria.db         people, photos, face data, cameras, records, accounts, audit log
+data/live-tracker.db     people, photos, face data, cameras, records, accounts, audit log
 data/photos/<id>/        face photos
 data/snapshots/<day>/    one picture per decision (and a face crop), deleted after [storage] retention_days
 data/branding/logo.png   the logo set in Settings
