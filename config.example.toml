@@ -2,7 +2,7 @@
 # People, cameras and accounts are managed in the web UI. This file holds what the server needs to start.
 
 [camera]
-# Only used by `python -m portaria import` (to create the first camera) and as the default for `probe`.
+# Only used by `live-tracker import` (to create the first camera) and as the default for `probe`.
 source = ""
 stale_after_s = 2.0
 reconnect_delay_s = 2.0
@@ -18,7 +18,7 @@ min_sharpness = 30.0
 # "auraface" (ResNet-100, more accurate) or "sface" (lightweight, for comparison).
 model = "auraface"
 # Cosine similarity needed to accept a match. It depends on the model: re-run
-# `python -m portaria evaluate` and adjust whenever you change models.
+# `live-tracker evaluate` and adjust whenever you change models.
 accept_threshold = 0.45
 min_margin = 0.08        # best person must beat the runner-up by this much
 
