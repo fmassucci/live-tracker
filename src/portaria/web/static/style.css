@@ -416,6 +416,7 @@ form:not(:has(input[name="analysis"][value="faces"]:checked)) .only-faces { disp
 .video-empty { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 10px; padding: 24px; text-align: center; color: #c9cdd4; }
 .video-empty a { color: #fff; }
 .video-chips { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+.video-chips-end { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .glass {
   display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
   background: rgba(12, 13, 16, 0.58); color: #fff; font-size: 13px; font-weight: 550;

@@ -516,7 +516,7 @@
     "Warns of fire and smoke, in addition to the smoke detectors.": "Avisa sobre fogo e fumaça, como reforço aos detectores de fumaça.",
     "Watch live": "Ver ao vivo",
     "Wednesday": "quarta-feira",
-    "What the cameras see now. Boxes mark faces: green when recognized, red when not, yellow when the face can't be used yet.": "O que as câmeras veem agora. Os quadros marcam rostos: verde quando reconhecido, vermelho quando não, amarelo quando o rosto ainda não pode ser usado.",
+    "What each camera sees now, with its AI model's marks: faces in green when recognized and in red when not, people and things in orange.": "O que cada câmera vê agora, com as marcas do modelo de IA: rostos em verde quando reconhecidos e em vermelho quando não, pessoas e coisas em laranja.",
     "What the cameras with People and objects, Fire and smoke or Falls found: one record per stay, with the picture of that moment. Records are kept for {days} days.": "O que as câmeras com Pessoas e objetos, Fogo e fumaça ou Quedas encontraram: um registro por permanência, com a foto daquele momento. Os registros ficam guardados por {days} dias.",
     "What the system looks for in the picture.": "O que o sistema procura na imagem.",
     "What to look for": "O que procurar",

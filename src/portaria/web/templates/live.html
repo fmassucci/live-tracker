@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% from "_macros.html" import camera_chip, switch_button %}
+{% from "_macros.html" import icon, camera_chip, switch_button %}
 {% block title %}{{ t("Live") }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>{{ t("Live") }}</h1>
-    <p>{{ t("What the cameras see now. Boxes mark faces: green when recognized, red when not, yellow when the face can't be used yet.") }}</p>
+    <p>{{ t("What each camera sees now, with its AI model's marks: faces in green when recognized and in red when not, people and things in orange.") }}</p>
   </div>
-  <a class="button button-quiet" href="/cameras">{{ t("All cameras") }}</a>
+  <div class="actions">
+    <a class="button button-quiet" href="/cameras">{{ t("All cameras") }}</a>
+    {% if chosen %}<a class="button" href="/cameras/{{ chosen.id }}">{{ icon("pencil") }}{{ t("Edit camera") }}</a>{% endif %}
+  </div>
 </div>
 {% if cameras | length > 1 %}
 <nav class="tabs" aria-label="{{ t('Cameras') }}">
@@ -36,7 +39,9 @@
   {% endif %}
   <div class="video-chips">
     {{ camera_chip(state, t(recording_states[state]), "glass", chosen.id) }}
-    <span class="glass">{{ chosen.name }}{% if state in ("recording", "live") %}, {{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}{% endif %}</span>
+    <span class="video-chips-end">
+      <span class="glass">{{ chosen.name }}{% if state in ("recording", "live") %}, {{ camera_status.size }}, {{ t("{fps} fps", fps=t.number(camera_status.fps, 0)) }}{% endif %}</span>
+    </span>
   </div>
   <p class="video-label" data-video-label aria-live="polite"></p>
 </div>
