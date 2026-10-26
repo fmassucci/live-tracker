@@ -140,7 +140,8 @@ def _run(cfg: Config, args: argparse.Namespace) -> int:
     try:
         service = VisionService(cfg, source=args.source)
     except OSError as e:
-        if e.errno != errno.EADDRINUSE:
+        # On Windows, a port another program holds exclusively fails with WinError 10013 (access denied), not "in use".
+        if e.errno != errno.EADDRINUSE and getattr(e, "winerror", None) != 10013:
             raise
         if VisionClient(cfg.preview).status() is None:
             print(f"Port {cfg.preview.port} is in use by another program: set another [preview] port in config.toml.")

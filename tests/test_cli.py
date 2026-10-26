@@ -1,4 +1,5 @@
 import socket
+import sys
 import time
 import webbrowser
 from collections.abc import Callable
@@ -155,5 +156,16 @@ def test_a_second_recognition_service_does_not_start(tmp_path, cfg, monkeypatch,
 def test_another_program_on_the_service_port_is_reported(tmp_path, cfg, monkeypatch, capsys):
     monkeypatch.setattr(VisionService, "run", lambda self: pytest.fail("started the service"))
     with socket.create_server(("127.0.0.1", cfg.preview.port)):  # answers nothing, unlike the service
+        assert main(["--config", _config_file(tmp_path, cfg, free_port()), "run"]) == 1
+    assert "another program" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="exclusive port use is a Windows socket option")
+def test_a_program_holding_the_service_port_exclusively_is_reported(tmp_path, cfg, monkeypatch, capsys):
+    monkeypatch.setattr(VisionService, "run", lambda self: pytest.fail("started the service"))
+    with socket.socket() as other:  # like NI Application Web Server: the bind then fails with WinError 10013
+        other.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        other.bind(("0.0.0.0", cfg.preview.port))
+        other.listen()
         assert main(["--config", _config_file(tmp_path, cfg, free_port()), "run"]) == 1
     assert "another program" in capsys.readouterr().out
