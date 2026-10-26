@@ -1,5 +1,5 @@
 @echo off
-rem Starts Live Tracker and opens it in the default browser. install.bat puts Live Tracker.bat on the desktop to run it.
+rem Starts Live Tracker and opens it in the default browser. install.bat puts a Live Tracker shortcut on the desktop to run it.
 rem The recognition service and the web UI run in the background, without windows; their messages go to
 rem data\logs. This window closes once both answer. Stop the system, in Settings, stops them. What already runs
 rem is left as it is, so starting Live Tracker again only opens the browser.

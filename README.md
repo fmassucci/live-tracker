@@ -34,9 +34,9 @@ On Windows:
    `git clone https://github.com/fmassucci/live-tracker.git C:\live-tracker`.
 3. Double-click `install.bat`. It creates the Python environment in `.venv` with Live Tracker and its libraries,
    and `config.toml` from `config.example.toml`. It downloads the face models and puts **Live Tracker** on the
-   desktop (`Live Tracker.bat`, which runs `start.bat` from this folder). It needs the internet and takes a few
-   minutes the first time. Run it again after an update, with Live Tracker closed, or after moving the folder:
-   it keeps `config.toml`, the models and `data\`.
+   desktop (a shortcut, with the app's icon, that runs `start.bat` from this folder). It needs the internet and
+   takes a few minutes the first time. Run it again after an update, with Live Tracker closed, or after moving the
+   folder: it keeps `config.toml`, the models and `data\`.
 
 By hand, or on Linux, with the test tools:
 

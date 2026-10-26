@@ -1,7 +1,7 @@
 @echo off
 rem Installs Live Tracker in this folder: a Python environment in .venv with Live Tracker and its libraries,
-rem config.toml and the face models. Then puts Live Tracker.bat on the desktop, which starts it. Run it again after
-rem an update: it keeps config.toml, the models and data\.
+rem config.toml and the face models. Then puts a Live Tracker shortcut on the desktop, which starts it. Run it
+rem again after an update: it keeps config.toml, the models and data\.
 setlocal
 set "HERE=%~dp0"
 cd /d "%HERE%"
@@ -52,17 +52,17 @@ if not exist config.toml (
 echo Downloading the face models that are missing
 .venv\Scripts\python.exe -m live_tracker download-models || goto failed
 
-rem Live Tracker.bat on the desktop runs start.bat from this folder
+rem The Live Tracker shortcut on the desktop runs start.bat from this folder, with the app's icon: a .bat file
+rem can't have one. If the folder moves, running install.bat there again points the shortcut at it.
 set "DESKTOP="
 for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%d"
 if not defined DESKTOP set "DESKTOP=%USERPROFILE%\Desktop"
 if exist "%DESKTOP%\Portaria.bat" del "%DESKTOP%\Portaria.bat"
-set "LAUNCHER=%DESKTOP%\Live Tracker.bat"
-(
-    echo @echo off
-    echo rem Made by install.bat: starts Live Tracker from its folder. If the folder moves, run install.bat there again.
-    echo "%HERE%start.bat"
-) > "%LAUNCHER%" || goto failed
+set "LAUNCHER=%DESKTOP%\Live Tracker.lnk"
+set "ICON=%HERE%src\live_tracker\web\static\icon.ico"
+powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:LAUNCHER); $s.TargetPath = $env:HERE + 'start.bat'; $s.WorkingDirectory = $env:HERE; $s.IconLocation = $env:ICON; $s.Save()" || goto failed
+rem Installs before this one put Live Tracker.bat there instead
+if exist "%DESKTOP%\Live Tracker.bat" del "%DESKTOP%\Live Tracker.bat"
 echo Created "%LAUNCHER%"
 
 echo.
