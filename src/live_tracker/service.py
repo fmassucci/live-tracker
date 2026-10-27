@@ -1,5 +1,6 @@
 """The recognition service: every enabled camera from the database, each running its AI model (face
-recognition with its liveness check, people and objects, fire and smoke, or falls), and the doors attached to them.
+recognition with its liveness check, people and objects, fire and smoke, or falls), and the doors attached to them,
+plus the devices (ESP32 boards and Tuya modules) with their connections (devices/).
 
 Run it with `live-tracker run`. It keeps working on its own: the web UI can be stopped or
 restarted without affecting the door. They share the database, and the web UI reads frames and
@@ -18,9 +19,12 @@ from sqlalchemy import select
 
 from live_tracker.camera import Camera, Frame, part_of
 from live_tracker.config import Config
-from live_tracker.db import CAMERAS_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting
+from live_tracker.db import (
+    CAMERAS_VERSION, DEVICES_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting,
+)
 from live_tracker.db import Camera as CameraRow
 from live_tracker.decision import Decision
+from live_tracker.devices.manager import DeviceManager
 from live_tracker.door import make_door
 from live_tracker.drawing import Overlay, render
 from live_tracker.embedders import load_embedder
@@ -186,6 +190,7 @@ class VisionService:
         self._liveness = load_liveness(cfg.paths.models_dir, cfg.liveness.threshold)
         self._door = make_door(cfg.door.mode)
         self._events = EventLog(self.db, cfg.paths.data_dir)
+        self.devices = DeviceManager(cfg, self.db)
         self._door_allowed: set[str] = set()
         self._workers: dict[int | None, CameraWorker] = {}
         self._sources: dict[str, Camera] = {}  # by address: the cameras cut from one picture share it
@@ -222,6 +227,7 @@ class VisionService:
         if self._liveness.name == "none":
             log.warning("no liveness check: a photo of a person would be accepted. Download it in Settings, AI models.")
         self.preview.start()
+        self.devices.start()
         last_purge = float("-inf")
         try:
             while not self._stop.is_set():
@@ -242,6 +248,7 @@ class VisionService:
                 worker.stop()
             for source in self._sources.values():
                 source.stop()
+            self.devices.stop()
             self.preview.stop()
 
     def stop(self) -> None:
@@ -307,10 +314,10 @@ class VisionService:
         log.info("detected %s (%d, score %.2f) at %s", sighting.kind, sighting.count, sighting.score, spec.name)
 
     def _sync(self) -> None:
-        """Reloads faces and cameras when the web UI has changed them, and a camera's model once it's downloaded.
-        Stops when Settings stops the system."""
+        """Reloads faces, cameras and devices when the web UI has changed them, and a camera's model once it's
+        downloaded. Stops when Settings stops the system."""
         with self.db.session() as session:
-            keys = (FACES_VERSION, CAMERAS_VERSION, MODELS_VERSION, STOP_REQUESTS)
+            keys = (FACES_VERSION, CAMERAS_VERSION, MODELS_VERSION, DEVICES_VERSION, STOP_REQUESTS)
             versions = {key: get_setting(session, key, "0") for key in keys}
             # Only a stop asked after this service started: an earlier one was for the service that ran then.
             if self._versions and versions[STOP_REQUESTS] != self._versions[STOP_REQUESTS]:
@@ -341,6 +348,8 @@ class VisionService:
                                         record_every_s=c.record_every_s,
                                         record_while_present=c.record_while_present) for c in rows]
                 self._apply(specs)
+            if versions[DEVICES_VERSION] != self._versions.get(DEVICES_VERSION):
+                self.devices.load(session)
         self._versions = versions
 
     def _reload_liveness(self) -> None:
@@ -381,4 +390,5 @@ class VisionService:
             "door": self.cfg.door.mode,
             "people": len(self.gallery.people),
             "cameras": {str(spec_id or 0): worker.status for spec_id, worker in self._workers.items()},
+            **self.devices.status(),
         }
