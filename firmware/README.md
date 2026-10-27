@@ -41,6 +41,14 @@ ESP32 board ──connection──▶ Mosquitto on the server ◀──connectio
    `%c` is the board's client ID, which the example firmware sets to its device ID.
 4. Restart the service (`net stop mosquitto` then `net start mosquitto`, as administrator), and allow TCP
    port 1883 through the Windows firewall on the private network.
+5. Tell Live Tracker where the broker is, in `config.toml`, then restart Live Tracker:
+   ```
+   [mqtt]
+   host = "127.0.0.1"
+   username = "live-tracker"
+   password = "<the live-tracker password>"
+   ```
+   The Devices page says whether it is connected, and lists each board once it announces itself, to be named.
 
 ## Topics and messages
 
