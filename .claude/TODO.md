@@ -6,7 +6,8 @@ doors, switch lights and sound alarms. Planned with the user on 2026-10-24; tick
 ## Decisions
 
 - **Devices:** ESP32 boards with the user's own firmware, wired by the user, talking MQTT through Mosquitto on
-  the server. The message contract and an example sketch are in `firmware/`.
+  the server. The message contract and an example sketch are in `firmware/`. Since 2026-10-27 also ready-made
+  Tuya Wi-Fi modules (such as NovaDigital), controlled on the local network: see `todo/devices.md`.
 - **Cameras:** each runs at most one AI model, or none. Doors, lights and sirens are attached through rules, so
   there are no fixed "door cameras".
 - **Model order:** face recognition first, then person detection, then the others.
@@ -18,11 +19,18 @@ doors, switch lights and sound alarms. Planned with the user on 2026-10-24; tick
 ## Phase 1: devices and rules, no new AI
 
 - [x] MQTT message contract and example ESP32 sketch (`firmware/`)
-- [ ] Install `paho-mqtt` in the project environment and Mosquitto on this PC (waiting for the user's OK)
-- [ ] MQTT in the recognition service: board announcements, online/offline, relay states, button presses,
-      commands with confirmations, and a log of every command
-- [ ] Devices page: new boards appear by themselves to be named; status, IP, outputs, inputs, and a test
-      button per output
+- [x] `paho-mqtt` and `tinytuya` in the project (2026-10-27)
+- [ ] Mosquitto on the server, and `[mqtt]` in its `config.toml` (`firmware/README.md`)
+- [x] MQTT in the recognition service: board announcements, online/offline, relay states, button presses,
+      commands with confirmations, and a log of every command (2026-10-27; tried with a stand-in broker only)
+- [x] Devices page: new boards appear by themselves to be named; status, IP, outputs, inputs, and a test
+      button per output (2026-10-27, `todo/devices.md`)
+- [x] (user) NovaDigital Wi-Fi module paired with Smart Life on the JCCP network (2026-10-27)
+- [x] (user) Tuya developer account linked to Smart Life, for the module's local key
+- [x] Pulse the NovaDigital module by hand from this PC with tinytuya (2026-10-27, `todo/devices.md`)
+- [x] Tuya modules: the driver and the Tuya import on the Devices page; tried on the MS-107 (2026-10-27)
+- [ ] The door through an output: a camera's Actions section picks the output its recognitions pulse
+      (`todo/devices.md`, step 3)
 - [ ] New data structure: each camera's AI model with its own settings; devices with their outputs and inputs;
       rules; records for any kind of event; the action log
 - [ ] Camera settings in sections: Video, AI model, Actions, Recording
@@ -39,6 +47,8 @@ doors, switch lights and sound alarms. Planned with the user on 2026-10-24; tick
       downloaded; a spoof is recorded as one and never opens. Still to test with photos and phones at the door
 - [ ] Manual override, and an alert when a device goes offline
 - [ ] Wiring checked: relay off means door locked, and each output's off timer runs on the board
+- [ ] The NovaDigital module's terminals (mains output or dry contact) and the lock's kind (strike or magnetic)
+      checked, and its own countdown and power-on state set
 
 ## Phase 2: GPU and person detection
 

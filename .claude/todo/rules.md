@@ -241,7 +241,7 @@ with their track. At the fall, the event carries that name; without one, one mor
   other time in the app.
 - `lists`: named lists of people, cameras or outputs, such as "Managers".
 - The site mode, in `settings`.
-- `devices`, `outputs`, `inputs`: the boards, from the roadmap's Phase 1.
+- `devices`, `outputs`, `inputs`: the boards and Tuya modules, from the roadmap's Phase 1 and devices.md.
 - `events`: today's table for any kind of event: `kind` as `face.recognized`, `object.detected`, `fall`,
   `phone.in_hand`, `input.button`; a `facts` JSON (holder, plate, liveness score); the track; the rule that made it.
 - `rule_runs`: the traces. `action_log`: every action and its result, for the audit.
@@ -258,7 +258,7 @@ The rules engine runs inside the recognition service, beside the cameras, so a d
 - `pipeline.py` and `decision.py`: liveness after a match, and the visit's verdict.
 - `objects.py`: `Presence` per track instead of per kind.
 - `models.py`: what each model needs and gives, beside its files.
-- `door.py`: replaced by outputs over MQTT.
+- `door.py`: replaced by outputs, through the device drivers of devices.md (MQTT boards, Tuya modules).
 
 ## Screens
 
