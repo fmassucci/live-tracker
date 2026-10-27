@@ -64,6 +64,15 @@ class DoorConfig:
 
 
 @dataclass
+class MqttConfig:
+    # The broker the ESP32 boards connect to (firmware/README.md). "": no boards; Tuya modules don't need it.
+    host: str = ""
+    port: int = 1883
+    username: str = "live-tracker"
+    password: str = ""
+
+
+@dataclass
 class PreviewConfig:
     # The recognition service's local HTTP port (video and status), read by the web UI.
     host: str = "127.0.0.1"
@@ -96,6 +105,7 @@ class Config:
     liveness: LivenessConfig = field(default_factory=LivenessConfig)
     decision: DecisionConfig = field(default_factory=DecisionConfig)
     door: DoorConfig = field(default_factory=DoorConfig)
+    mqtt: MqttConfig = field(default_factory=MqttConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     web: WebConfig = field(default_factory=WebConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)

@@ -39,6 +39,14 @@ unknown_after_s = 2.0    # a face must stay unmatched this long to be recorded a
 # Only "shadow" exists for now: decisions are recorded and nothing is opened.
 mode = "shadow"
 
+[mqtt]
+# The broker the ESP32 boards connect to (firmware/README.md), usually Mosquitto on this computer: "127.0.0.1".
+# Empty: no ESP32 boards. Tuya modules (NovaDigital and others) don't need it.
+host = ""
+port = 1883
+username = "live-tracker"
+password = ""
+
 [preview]
 # Local port where the recognition service shares video and status with the web UI.
 host = "127.0.0.1"
