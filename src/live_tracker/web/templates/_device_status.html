@@ -1,0 +1,27 @@
+{# A device's state on the Devices page. With oob, the page's refresh swaps it in place (_device_states.html). #}
+{% macro device_status(d, st, service_up, t, problems, oob=False) -%}
+<div class="device-status" id="device-status-{{ d.id }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if not service_up %}<span class="state state-off">{{ t("Unknown") }}</span>
+  {% elif st and st.online %}<span class="state">{{ t("Online") }}</span>
+  {% elif st and st.problem %}<span class="state state-bad">{{ t("Offline") }}</span>
+  {% else %}<span class="state state-warn">{{ t("Connecting") }}</span>{% endif %}
+  {% if st and st.ip %}<span>{{ st.ip }}</span>{% endif %}
+  {% if st and st.protocol %}<span>{{ t("Protocol {version}", version=st.protocol) }}</span>{% endif %}
+  {% if st and st.rssi %}<span>{{ t("Wi-Fi {rssi} dBm", rssi=st.rssi) }}</span>{% endif %}
+  {% if service_up and st and not st.online and st.problem in problems %}<p>{{ t(problems[st.problem]) }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# On or off; hidden while the device's state isn't known. #}
+{% macro output_state(o, st, t, oob=False) -%}
+{% set on = (st.outputs or {}).get(o.key) if st and st.online else none %}
+<span id="output-state-{{ o.id }}" class="state{% if not on %} state-off{% endif %}"{% if oob %} hx-swap-oob="true"{% endif %}{% if on is none %} hidden{% endif %}>{{ t("On") if on else t("Off") }}</span>
+{%- endmacro %}
+
+{# An input's last event since the recognition service started, such as "Pressed at 14:02". #}
+{% macro input_state(i, st, t, input_values, oob=False) -%}
+{% set last = (st.inputs or {}).get(i.key) if st else none %}
+<span id="input-state-{{ i.id }}" class="muted small"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {%- if last %}{{ t("{event} at {time}", event=t(input_values.get(last.value, last.value)), time=last.at[11:16]) }}{% endif -%}
+</span>
+{%- endmacro %}

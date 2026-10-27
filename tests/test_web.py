@@ -1,6 +1,8 @@
 import io
 import re
+import threading
 import zipfile
+from dataclasses import replace
 from datetime import date, datetime, time
 from types import SimpleNamespace
 
@@ -11,7 +13,10 @@ from conftest import FakeTools, place_model_file
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from live_tracker.db import STOP_REQUESTS, AuditEntry, Camera, Event, Person, User, get_setting
+from live_tracker.db import (
+    STOP_REQUESTS, AuditEntry, Camera, Device, DeviceCommand, DeviceInput, DeviceOutput, Event, Person, User, get_setting,
+)
+from live_tracker.devices.tuya import CloudDevice, CloudOutput
 from live_tracker.events import face_path
 from live_tracker.users import authenticate, create_user, is_admin, user_exists
 from live_tracker.web.app import create_app
@@ -91,7 +96,8 @@ def test_wrong_password_is_refused(app, client):
     assert "Usuário ou senha incorretos." in response.text
 
 
-@pytest.mark.parametrize("path", ["/", "/people", "/people/new", "/records", "/cameras", "/cameras/new", "/live", "/settings"])
+@pytest.mark.parametrize("path", ["/", "/people", "/people/new", "/records", "/cameras", "/cameras/new", "/live", "/settings",
+                                  "/devices", "/devices/tuya"])
 def test_every_page_renders_in_both_languages(client, path):
     assert client.get(path).status_code == 200
     client.post("/language", data={"lang": "en", "next": path})
@@ -617,3 +623,151 @@ def test_door_screen_needs_its_secret_address(client, app):
     assert client.get(f"/door?camera=1&key={key}").status_code == 200
     state = client.get(f"/door/state?camera=1&key={key}").json()
     assert state["tone"] == "bad"  # the recognition service isn't running in tests
+
+
+TUYA_MODULE = CloudDevice(uid="eb2002", name="Módulo Mini Ms-107 2 Canais Wi-Fi", model="MS-107 2C WF",
+                          local_key="chave-local-1234", outputs=(CloudOutput("1", 1, 9), CloudOutput("2", 2, 10)),
+                          online=True, power_on="on")
+
+
+@pytest.fixture
+def tuya_account(monkeypatch):
+    """The Tuya account as the developer project lists it; `module` is what it says about the one module."""
+    account = SimpleNamespace(module=TUYA_MODULE, asked=[])
+
+    def cloud_devices(access_id, secret, region):
+        account.asked.append((access_id, secret, region))
+        return [account.module]
+
+    monkeypatch.setattr("live_tracker.web.devices.cloud_devices", cloud_devices)
+    return account
+
+
+def test_tuya_modules_are_imported_with_an_output_per_channel_and_the_secret_is_never_shown(app, client, tuya_account):
+    page = client.post("/devices/tuya", data={"access_id": "h7e5geh8", "secret": "segredo-do-projeto", "region": "us"})
+    assert page.status_code == 200 and "Módulo Mini Ms-107 2 Canais Wi-Fi" in page.text and "2 canais" in page.text
+    assert "os relés ligam" in page.text  # it switches its relays on after a power cut
+    assert tuya_account.asked == [("h7e5geh8", "segredo-do-projeto", "us")]
+    assert client.post("/devices/tuya/import", data={"uids": "eb2002"}).status_code == 200
+    with app.state.services.db.session() as session:
+        device = session.scalar(select(Device))
+        assert device.kind == "tuya" and device.local_key == "chave-local-1234" and device.model == "MS-107 2C WF"
+        assert [(o.key, o.name, o.timer_dp) for o in device.outputs] == [("1", "Canal 1", 9), ("2", "Canal 2", 10)]
+        device.outputs[0].name = "Fechadura"
+    for path in ("/devices", "/devices/tuya", f"/devices/{device.id}"):
+        text = client.get(path).text
+        assert "segredo-do-projeto" not in text and "chave-local-1234" not in text
+    # Paired again: a new key. Importing again keeps the names, and an empty Secret keeps the saved one.
+    tuya_account.module = replace(TUYA_MODULE, local_key="chave-nova-5678")
+    client.post("/devices/tuya", data={"access_id": "h7e5geh8", "secret": "", "region": "us"})
+    client.post("/devices/tuya/import", data={"uids": "eb2002"})
+    assert tuya_account.asked[-1] == ("h7e5geh8", "segredo-do-projeto", "us")
+    with app.state.services.db.session() as session:
+        device = session.scalar(select(Device))
+        assert device.local_key == "chave-nova-5678" and [o.name for o in device.outputs] == ["Fechadura", "Canal 2"]
+
+
+def _device(app, kind: str = "tuya") -> Device:
+    with app.state.services.db.session() as session:
+        device = Device(kind=kind, uid=f"{kind}-1", name="Porta", new=kind == "esp32",
+                        outputs=[DeviceOutput(key="1", name="Canal 1", timer_dp=9, max_ms=3_600_000)],
+                        inputs=[DeviceInput(key="button1", name="button1")] if kind == "esp32" else [])
+        session.add(device)
+    return device
+
+
+def test_a_device_and_its_outputs_are_named_and_checked(app, client):
+    device = _device(app, "esp32")
+    page = client.get("/devices").text
+    assert "Novo" in page and "Dar nome" in page
+    [output], [board_input] = device.outputs, device.inputs
+    form = {"name": "Porta dos funcionários", "output_id": output.id, "output_name": "Fechadura",
+            "output_kind": "lock", "output_seconds": "3", "input_id": board_input.id, "input_name": "Botão de saída"}
+    assert client.post(f"/devices/{device.id}", data={**form, "output_seconds": "2.5"}).status_code == 400
+    assert client.post(f"/devices/{device.id}", data={**form, "output_kind": "door"}).status_code == 400
+    assert client.post(f"/devices/{device.id}", data=form).status_code == 200
+    with app.state.services.db.session() as session:
+        saved = session.get(Device, device.id)
+        assert saved.name == "Porta dos funcionários" and not saved.new
+        assert (saved.outputs[0].name, saved.outputs[0].kind, saved.outputs[0].pulse_ms) == ("Fechadura", "lock", 3000)
+        assert saved.inputs[0].name == "Botão de saída"
+
+
+def test_a_tuya_module_takes_a_fixed_address_only_as_four_numbers(app, client):
+    device = _device(app)
+    form = {"name": "Porta", "output_id": device.outputs[0].id, "output_name": "Fechadura", "output_kind": "lock",
+            "output_seconds": "3"}
+    assert client.post(f"/devices/{device.id}", data={**form, "address": "modulo.local"}).status_code == 400
+    client.post(f"/devices/{device.id}", data={**form, "address": "192.168.100.102"})
+    with app.state.services.db.session() as session:
+        assert session.get(Device, device.id).address == "192.168.100.102"
+
+
+def test_only_administrators_change_or_test_devices(app, client):
+    device = _device(app)
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with TestClient(app) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        text = cashier.get("/devices").text
+        assert "Porta" in text and "/outputs/" not in text and 'href="/devices/tuya"' not in text
+        assert cashier.get(f"/devices/{device.id}").status_code == 403
+        assert cashier.post(f"/devices/{device.id}", data={"name": "Outra"}).status_code == 403
+        assert cashier.post(f"/devices/{device.id}/delete", data={"confirm": "true"}).status_code == 403
+        assert cashier.post(f"/devices/{device.id}/outputs/{device.outputs[0].id}/test").status_code == 403
+        assert cashier.get("/devices/tuya").status_code == 403
+    with app.state.services.db.session() as session:
+        assert session.scalars(select(DeviceCommand)).all() == []
+
+
+def test_testing_an_output_needs_the_recognition_service(app, client):
+    device = _device(app)
+    response = client.post(f"/devices/{device.id}/outputs/{device.outputs[0].id}/test")
+    assert "Não deu para acionar Canal 1" in response.text
+    assert "serviço de reconhecimento não está rodando" in response.text
+
+
+class DeviceVision(NoVision):
+    """A recognition service that carries out every command the page adds, as devices/manager.py does."""
+
+    def __init__(self, db, result: str = "ok", error: str = "") -> None:
+        self.db, self.result, self.error = db, result, error
+        self.carried_out: list[tuple[str, int]] = []
+        self.stop = threading.Event()
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def status(self):
+        return {"cameras": {}, "devices": {}, "broker": "off"}
+
+    def _run(self):
+        while not self.stop.wait(0.05):
+            with self.db.session() as session:
+                for command in session.scalars(select(DeviceCommand).where(DeviceCommand.result == "")):
+                    command.result, command.error, command.done_at = self.result, self.error, datetime.now()
+                    self.carried_out.append((command.output_key, command.ms))
+
+
+def test_testing_an_output_pulses_it_for_a_second_and_says_how_it_went(app, client):
+    device = _device(app)
+    url = f"/devices/{device.id}/outputs/{device.outputs[0].id}/test"
+    vision = app.state.services.vision = DeviceVision(app.state.services.db)
+    response = client.post(url)
+    vision.stop.set()
+    assert "Canal 1: ligou por um segundo" in response.text and vision.carried_out == [("1", 1000)]
+    vision = app.state.services.vision = DeviceVision(app.state.services.db, "failed", "offline")
+    response = client.post(url)
+    vision.stop.set()
+    assert "Não deu para acionar Canal 1" in response.text and "O dispositivo está offline." in response.text
+    with app.state.services.db.session() as session:
+        tests = session.scalars(select(AuditEntry).where(AuditEntry.action == "output tested")).all()
+    assert [entry.detail for entry in tests] == ["Porta: Canal 1", "Porta: Canal 1"]
+
+
+def test_removing_a_device_needs_the_confirmation(app, client):
+    device = _device(app)
+    client.post(f"/devices/{device.id}/delete")
+    with app.state.services.db.session() as session:
+        assert session.get(Device, device.id) is not None
+    client.post(f"/devices/{device.id}/delete", data={"confirm": "true"})
+    with app.state.services.db.session() as session:
+        assert session.get(Device, device.id) is None and session.scalars(select(DeviceOutput)).all() == []

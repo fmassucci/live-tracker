@@ -1,0 +1,8 @@
+{# Every device's state, swapped into the open Devices page every few seconds. #}
+{% from "_device_status.html" import device_status, output_state, input_state %}
+{% for d in devices %}
+{% set st = states.get(d.id | string) %}
+{{ device_status(d, st, service_up, t, problems, oob=True) }}
+{% for o in d.outputs %}{{ output_state(o, st, t, oob=True) }}{% endfor %}
+{% for i in d.inputs %}{{ input_state(i, st, t, input_values, oob=True) }}{% endfor %}
+{% endfor %}

@@ -1,0 +1,9 @@
+{# Result of an output's Test, as a toast. #}
+{% from "_macros.html" import toast %}
+<div hx-swap-oob="beforeend:#toasts">
+  {% if result == "ok" %}
+  {% call toast("ok", "check", t("Close")) %}{{ t("{name} switched on for a second, then off by itself.", name=name) }}{% endcall %}
+  {% else %}
+  {% call toast("bad", "alert", t("Close")) %}{{ t("{name} wasn't switched on.", name=name) }}{% if error %} {{ t(error) }}{% endif %}{% endcall %}
+  {% endif %}
+</div>

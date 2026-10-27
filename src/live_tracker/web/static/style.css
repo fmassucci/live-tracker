@@ -656,6 +656,30 @@ a.entry-name:hover { color: var(--orange-ink); }
 .found { display: grid; gap: 10px; list-style: none; margin: 14px 0 0; padding: 0; }
 .found > li { padding: 12px 14px; border-radius: var(--radius-control); background: var(--surface-2); }
 .found code { font-size: 13px; word-break: break-all; }
+
+/* Devices: a card per board or module, its outputs each with their state and a Test button, then its inputs */
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; list-style: none; margin: 0; padding: 0; }
+.device-card {
+  display: grid; gap: 14px; align-content: start; padding: 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-panel);
+}
+.device-card.is-new { border-color: color-mix(in srgb, var(--orange) 45%, var(--line)); }
+.device-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.device-head h2 { font-size: 16px; }
+.device-kind { margin-top: 2px; color: var(--ink-2); font-size: 13px; }
+.device-status { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.device-status p { flex-basis: 100%; margin: 0; }
+.device-ports { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.device-ports li { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.port-name { display: grid; gap: 1px; margin-right: auto; min-width: 0; font-weight: 550; overflow-wrap: anywhere; }
+.port-name .muted { font-weight: 400; }
+.port-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) auto; gap: 8px; align-items: center; }
+.device-remove { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.device-remove h3, .device-remove p { flex-basis: 100%; margin: 0; }
+.hint-warn { color: var(--caution); }
+@media (max-width: 640px) {
+  .port-row { grid-template-columns: minmax(0, 1fr); }
+}
 .tabs {
   display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; margin-bottom: 18px;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px;

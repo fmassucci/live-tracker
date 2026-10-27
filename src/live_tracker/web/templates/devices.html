@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, toast %}
+{% from "_device_status.html" import device_status, output_state, input_state %}
+{% block title %}{{ t("Devices") }}{% endblock %}
+{% block toasts %}
+{% if not service_up %}
+{% call toast("bad", "alert", t("Close")) %}{{ t("The recognition service is not running, so devices can't be reached. To start it, double-click Live Tracker on the desktop of the computer where the system is installed.") }}{% endcall %}
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t("Devices") }}</h1>
+    <p>{{ t("The boards and modules that open doors and switch lights and sirens. Each output switches itself off on the device, even when the network is down.") }}</p>
+  </div>
+  {% if is_admin %}<a class="button" href="/devices/tuya">{{ icon("plus") }}{{ t("Add Tuya devices") }}</a>{% endif %}
+</div>
+{% if devices %}
+<div hidden hx-get="/devices/states" hx-trigger="every 3s" hx-swap="none"></div>
+<ul class="device-grid">
+  {% for d in devices %}
+  {% set st = states.get(d.id | string) %}
+  <li class="device-card{% if d.new %} is-new{% endif %}">
+    <div class="device-head">
+      <div>
+        <h2>{{ d.name }}</h2>
+        <p class="device-kind">{{ t(device_kinds.get(d.kind, d.kind)) }}{% if d.model %} · {{ d.model }}{% endif %}</p>
+      </div>
+      {% if d.new %}<span class="state state-object">{{ t("New") }}</span>{% endif %}
+    </div>
+    {{ device_status(d, st, service_up, t, problems) }}
+    {% if d.outputs %}
+    <ul class="device-ports" aria-label="{{ t('Outputs') }}">
+      {% for o in d.outputs %}
+      <li>
+        <span class="port-name">{{ o.name }}<span class="muted small">{{ t(output_kinds.get(o.kind, "Other")) }}</span></span>
+        {{ output_state(o, st, t) }}
+        {% if is_admin %}
+        <button class="button button-quiet button-small" type="button" hx-post="/devices/{{ d.id }}/outputs/{{ o.id }}/test" hx-swap="none" hx-indicator="this">{{ icon("zap") }}{{ t("Test") }}</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if d.inputs %}
+    <ul class="device-ports" aria-label="{{ t('Inputs') }}">
+      {% for i in d.inputs %}
+      <li>
+        <span class="port-name">{{ i.name }}<span class="muted small">{{ t(input_kinds.get(i.kind, "Button")) }}</span></span>
+        {{ input_state(i, st, t, input_values) }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if is_admin %}
+    <div class="actions">
+      <a class="button {{ '' if d.new else 'button-quiet' }} button-small" href="/devices/{{ d.id }}">{{ icon("pencil") }}{{ t("Name it") if d.new else t("Edit") }}</a>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">
+  <p>{{ t("No devices yet. Tuya modules, such as NovaDigital's, are imported from your Tuya developer account. ESP32 boards appear here by themselves once they connect.") }}</p>
+  {% if is_admin %}<a class="button" href="/devices/tuya">{{ icon("plus") }}{{ t("Add Tuya devices") }}</a>{% endif %}
+</div>
+{% endif %}
+
+<section class="section">
+  <div class="subpanel">
+    <h3>{{ t("ESP32 boards") }}</h3>
+    {% if not mqtt_host %}
+    <p class="muted small">{{ t("Boards with the Live Tracker firmware connect through an MQTT broker. Write its address in config.toml, under [mqtt], and they appear here by themselves.") }}</p>
+    {% elif broker == "connected" %}
+    <p class="muted small">{{ t("Connected to the MQTT broker at {host}. New boards appear here by themselves.", host=mqtt_host) }}</p>
+    {% else %}
+    <p class="muted small">{{ t("Not connected to the MQTT broker at {host}. Check that Mosquitto is running.", host=mqtt_host) }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

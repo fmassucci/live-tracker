@@ -1,4 +1,4 @@
-"""The web UI app: people, today's entries, records, cameras, live view and settings, plus the door screen.
+"""The web UI app: people, today's entries, records, cameras, devices, live view and settings, plus the door screen.
 
 Every text is English in the code and templates, and translated through live_tracker.i18n.
 """
@@ -21,7 +21,7 @@ from live_tracker.config import Config
 from live_tracker.db import Database, ensure_setting
 from live_tracker.people import FaceTools, People
 from live_tracker.users import ensure_default_user
-from live_tracker.web import ai_models, auth, cameras, data, kiosk, monitor, people, settings
+from live_tracker.web import ai_models, auth, cameras, data, devices, kiosk, monitor, people, settings
 from live_tracker.web.common import ASSET_VERSION, LoginRequired, Services, aspect
 from live_tracker.web.vision_client import VisionClient
 
@@ -58,6 +58,6 @@ def create_app(cfg: Config) -> FastAPI:
     async def go_to_login(request: Request, exc: LoginRequired) -> RedirectResponse:
         return RedirectResponse(f"/login?next={quote(request.url.path)}", status_code=303)
 
-    for module in (auth, monitor, people, cameras, ai_models, settings, data, kiosk):
+    for module in (auth, monitor, people, cameras, devices, ai_models, settings, data, kiosk):
         app.include_router(module.router)
     return app

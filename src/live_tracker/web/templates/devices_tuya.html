@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ t("Add Tuya devices") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="back-link" href="/devices">{{ icon("chevron-left") }}{{ t("Devices") }}</a>
+    <h1>{{ t("Add Tuya devices") }}</h1>
+    <p>{{ t("Tuya makes the electronics of many Wi-Fi modules, NovaDigital's among them. Pair the module in the Smart Life app, link Smart Life to a project on Tuya's developer site, iot.tuya.com, and paste the project's keys here. The system then talks to the module on the local network, without the internet.") }}</p>
+  </div>
+</div>
+{% if error %}<p class="form-error" role="alert">{{ t(error) }}</p>{% endif %}
+
+<div class="settings">
+  <section class="settings-block">
+    <div>
+      <h2>{{ t("Tuya developer project") }}</h2>
+      <p>{{ t("On iot.tuya.com: Cloud, your project, Overview. The Secret stays on this computer and is never shown again.") }}</p>
+    </div>
+    <form method="post" action="/devices/tuya">
+      <div class="field">
+        <label for="access_id">Access ID</label>
+        <input type="text" id="access_id" name="access_id" value="{{ access_id }}" required maxlength="64" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="secret">Access Secret</label>
+        <input type="password" id="secret" name="secret" maxlength="64" autocomplete="off" {% if has_secret %}placeholder="{{ t('Saved') }}"{% else %}required{% endif %}>
+        {% if has_secret %}<span class="hint">{{ t("Leave it empty to keep the saved one.") }}</span>{% endif %}
+      </div>
+      <div class="field">
+        <label for="region">{{ t("Data center") }}</label>
+        <select id="region" name="region">
+          {% for key, label in regions.items() %}<option value="{{ key }}" {% if key == region %}selected{% endif %}>{{ t(label) }}</option>{% endfor %}
+        </select>
+        <span class="hint">{{ t("The one chosen for the project. Accounts made in Brazil are usually in Western America.") }}</span>
+      </div>
+      <button class="button">{{ icon("search") }}{{ t("Look for devices") }}</button>
+    </form>
+  </section>
+
+  {% if found is not none %}
+  <section class="settings-block">
+    <div>
+      <h2>{{ t("Devices in the account") }}</h2>
+      <p>{{ t("Choose the ones to add. Adding one that is already here gives it its current key.") }}</p>
+    </div>
+    {% if found %}
+    <form method="post" action="/devices/tuya/import">
+      <ul class="found">
+        {% for d in found %}
+        <li>
+          <label class="check">
+            <input type="checkbox" name="uids" value="{{ d.uid }}" {% if not d.outputs %}disabled{% elif d.uid not in known %}checked{% endif %}>
+            <span>
+              <strong>{{ d.name or d.uid }}</strong>
+              <span class="hint">
+                {%- if d.model %}{{ d.model }} · {% endif -%}
+                {%- if d.outputs %}{{ t("1 channel") if d.outputs | length == 1 else t("{count} channels", count=d.outputs | length) }} · {% endif -%}
+                {{ t("Online") if d.online else t("Offline") }}
+              </span>
+              {% if not d.outputs %}<span class="hint">{{ t("It has no switch, so it can't be added.") }}</span>{% endif %}
+              {% if d.uid in known %}<span class="hint">{{ t("Already here as {name}.", name=known[d.uid]) }}</span>{% endif %}
+              {% if d.power_on in power_on %}<span class="hint hint-warn">{{ t(power_on[d.power_on]) }}</span>{% endif %}
+            </span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="form-actions"><button class="button">{{ t("Add the devices chosen") }}</button></div>
+    </form>
+    {% else %}
+    <p class="muted">{{ t("There are no devices in this account. Check the data center, and that Smart Life is linked to the project (Devices, Link App Account).") }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
