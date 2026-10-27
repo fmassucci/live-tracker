@@ -16,8 +16,10 @@ dependencies = [
     "numpy>=1.26",
     "onnxruntime>=1.20",
     "opencv-python>=4.10",
+    "paho-mqtt>=2.1",
     "python-multipart>=0.0.9",
     "sqlalchemy>=2.0",
+    "tinytuya>=1.17",
     "uvicorn>=0.29",
 ]
 
