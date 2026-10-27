@@ -33,6 +33,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 FACES_VERSION = "faces_version"
 CAMERAS_VERSION = "cameras_version"
 MODELS_VERSION = "models_version"  # a model was downloaded or removed
+DEVICES_VERSION = "devices_version"  # a device or one of its outputs was added, changed or removed
 STOP_REQUESTS = "stop_requests"  # bumped when Settings stops the system: the recognition service stops
 
 
@@ -153,6 +154,87 @@ class AuditEntry(Base):
     username: Mapped[str] = mapped_column(String(60))
     action: Mapped[str] = mapped_column(String(40))
     detail: Mapped[str] = mapped_column(String(300), default="")
+
+
+class Device(Base):
+    """A board or module that switches things (door locks, lights, sirens) and reports buttons and contacts.
+
+    "esp32": a board with our firmware, over MQTT (firmware/README.md); it announces itself. "tuya": a ready-made
+    Wi-Fi module made by Tuya (NovaDigital and others), on the local network with its local key; imported from the
+    Tuya developer account. The recognition service keeps the connections (devices/).
+    """
+
+    __tablename__ = "devices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(10))  # "esp32" or "tuya"
+    uid: Mapped[str] = mapped_column(String(64), unique=True)  # the board's device ID, or the Tuya device ID
+    address: Mapped[str] = mapped_column(String(64), default="")  # a fixed IP; "": found on the network
+    local_key: Mapped[str] = mapped_column(String(64), default="")  # Tuya only; never shown or logged
+    model: Mapped[str] = mapped_column(String(80), default="")  # Tuya's model, or the board's firmware version
+    new: Mapped[bool] = mapped_column(Boolean, default=False)  # a board that announced itself, not named yet
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    outputs: Mapped[list[DeviceOutput]] = relationship(
+        back_populates="device", cascade="all, delete-orphan", passive_deletes=True, order_by="DeviceOutput.id"
+    )
+    inputs: Mapped[list[DeviceInput]] = relationship(
+        back_populates="device", cascade="all, delete-orphan", passive_deletes=True, order_by="DeviceInput.id"
+    )
+
+
+class DeviceOutput(Base):
+    """A relay. Every pulse ends on the device itself, after at most max_ms, even when the network is down."""
+
+    __tablename__ = "device_outputs"
+    __table_args__ = (UniqueConstraint("device_id", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(20))  # the board's output key, such as "relay1"; Tuya: its switch's DP
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(10), default="relay")  # "lock", "light", "siren" or "relay"
+    pulse_ms: Mapped[int] = mapped_column(Integer, default=3000)  # how long it stays on when a rule switches it on
+    max_ms: Mapped[int] = mapped_column(Integer, default=10000)  # the longest the device keeps it on
+    timer_dp: Mapped[int | None] = mapped_column(Integer)  # Tuya: the countdown that switches it off on the module
+
+    device: Mapped[Device] = relationship(back_populates="outputs")
+
+
+class DeviceInput(Base):
+    """A button or a door contact on a board."""
+
+    __tablename__ = "device_inputs"
+    __table_args__ = (UniqueConstraint("device_id", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(10), default="button")  # "button" or "contact"
+
+    device: Mapped[Device] = relationship(back_populates="inputs")
+
+
+class DeviceCommand(Base):
+    """A command for an output, and what came of it. The web UI adds one; the recognition service, which holds the
+    connections, carries it out and fills in the result. One not picked up within seconds is dropped, never sent
+    late (devices.LATE_S)."""
+
+    __tablename__ = "device_commands"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+    output_key: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str] = mapped_column(String(10), default="pulse")
+    ms: Mapped[int] = mapped_column(Integer)
+    requested_by: Mapped[str] = mapped_column(String(60))  # who pressed Test
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # "": waiting; "sent": being carried out; "ok"; "failed" (error says why); "late": dropped, never sent
+    result: Mapped[str] = mapped_column(String(10), default="", index=True)
+    error: Mapped[str] = mapped_column(String(200), default="")
 
 
 class Setting(Base):
