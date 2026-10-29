@@ -3,7 +3,7 @@ importing Tuya modules from the Tuya developer account.
 
 The recognition service holds the connections (devices/manager.py): a test is a row in device_commands that it
 carries out. Everyone signed in sees the devices; only administrators change them or test an output, since an
-output can open a door.
+output can drive a lock.
 """
 
 from __future__ import annotations

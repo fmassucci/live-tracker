@@ -47,8 +47,8 @@ def _import_camera(cfg: Config, db: Database, report: ImportReport) -> None:
     with db.session() as session:
         if session.scalar(select(func.count()).select_from(Camera)):
             return
-        name = Translator(cfg.web.language)("Door")
-        session.add(Camera(name=name, url=cfg.camera.source, device="door"))
+        name = Translator(cfg.web.language)("Camera")
+        session.add(Camera(name=name, url=cfg.camera.source))
         bump(session, CAMERAS_VERSION)
         report.camera = name
 
@@ -99,7 +99,7 @@ def _import_events(cfg: Config, db: Database, report: ImportReport) -> None:
                 person_name=entry.get("person"),
                 score=entry["score"],
                 snapshot=snapshot,
-                door=entry.get("door", "shadow"),
+                action={"opened": "switched", "kept": "denied"}.get(entry.get("door"), "shadow"),  # as in 0010
                 model=entry.get("model", ""),
                 liveness=entry.get("liveness", ""),
             ))

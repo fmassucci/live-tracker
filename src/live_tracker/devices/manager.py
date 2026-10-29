@@ -1,6 +1,6 @@
 """The devices inside the recognition service: their connections, the commands the web UI adds, and their state.
 
-The web UI never talks to a device: a Tuya module accepts one connection, and the door must not depend on the web
+The web UI never talks to a device: a Tuya module accepts one connection, and the devices must not depend on the web
 UI. It adds a row to device_commands; this picks it up within a fraction of a second, carries it out and fills in
 the result. A command older than LATE_S is dropped, never sent late. New ESP32 boards that announce themselves
 are added to the database, to be named on the Devices page.
@@ -18,20 +18,20 @@ from sqlalchemy.orm import Session, selectinload
 
 from live_tracker.config import Config
 from live_tracker.db import DEVICES_VERSION, Database, Device, DeviceCommand, DeviceInput, DeviceOutput, bump
-from live_tracker.devices import BROKER, OFFLINE, DeviceError, DeviceSpec, OutputSpec
+from live_tracker.devices import BROKER, NO_OUTPUT, OFFLINE, DeviceError, DeviceSpec, OutputSpec
 from live_tracker.devices.esp32 import Esp32Boards
 from live_tracker.devices.tuya import TuyaDiscovery, TuyaModule
 
 log = logging.getLogger(__name__)
 
-LATE_S = 5.0  # a command not picked up by then is dropped: a door must not open seconds after the button
+LATE_S = 5.0  # a command not picked up by then is dropped: an output must not switch seconds after the button
 COMMANDS_EVERY_S = 0.2
 OUTPUT_KINDS = ("lock", "light", "siren", "relay")
 INPUT_KINDS = ("button", "contact")
 
 
 def device_spec(device: Device) -> DeviceSpec:
-    outputs = tuple(OutputSpec(o.key, o.kind, o.pulse_ms, o.max_ms, o.timer_dp) for o in device.outputs)
+    outputs = tuple(OutputSpec(o.key, o.kind, o.pulse_ms, o.max_ms, o.timer_dp, o.id) for o in device.outputs)
     return DeviceSpec(device.id, device.name, device.kind, device.uid, device.address, device.local_key, outputs)
 
 
@@ -116,6 +116,18 @@ class DeviceManager:
             self._boards.pulse(spec, key, ms)
         else:
             raise DeviceError(OFFLINE)
+
+    def pulse_output(self, output_id: int) -> str:
+        """Switches an output on for its own pulse time, as a camera linked to it does. Returns the device's name;
+        raises DeviceError."""
+        with self._lock:
+            found = [(spec, output) for spec in self._specs.values() for output in spec.outputs
+                     if output.id == output_id]
+        if not found:
+            raise DeviceError(NO_OUTPUT, f"output {output_id}")
+        spec, output = found[0]
+        self.pulse(spec.id, output.key, output.pulse_ms)
+        return spec.name
 
     def _run_commands(self) -> None:
         while not self._stop.wait(COMMANDS_EVERY_S):

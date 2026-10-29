@@ -12,7 +12,7 @@
     setInterval(tick, 1000);
   }
 
-  // Live frames light up when the door decides, and the label says who or why.
+  // Live frames light up when the camera decides, and the label says who or why.
   for (const frame of document.querySelectorAll("[data-state-url]")) {
     const label = frame.querySelector("[data-video-label]");
     const poll = async () => {
@@ -204,7 +204,7 @@
       if (toast.dataset.hideUrl) fetch(toast.dataset.hideUrl, { method: "POST" }).catch(() => {});
       dismiss(toast);
     }
-    // Copy a field, such as the door screen address.
+    // Copy a field, such as the recognition screen address.
     const copy = event.target.closest("[data-copy]");
     if (copy) {
       const field = document.getElementById(copy.dataset.copy);

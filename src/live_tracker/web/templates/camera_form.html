@@ -127,13 +127,23 @@
       </div>
     </section>
 
-    <section class="settings-part" aria-labelledby="part-device">
+    <section class="settings-part only-faces" aria-labelledby="part-device">
       <h2 id="part-device">{{ t("Attached device") }}</h2>
-      <p class="part-note">{{ t("With a door, it opens when someone with access is recognized, and the entry shows on Today.") }}</p>
-      <div class="choices">
-        {% for key, label in devices.items() %}
-        <label class="choice"><input type="radio" name="device" value="{{ key }}" {% if form.device == key %}checked{% endif %}>{{ t(label) }}</label>
-        {% endfor %}
+      <p class="part-note">{{ t("When it recognizes someone with access, it switches this device output on.") }}</p>
+      <div class="field">
+        <label for="output_id">{{ t("Output") }}</label>
+        <select id="output_id" name="output_id">
+          <option value="">{{ t("No output") }}</option>
+          {% for d in device_outputs %}
+          <optgroup label="{{ d.name }}">
+            {% for o in d.outputs %}
+            <option value="{{ o.id }}" {% if form.output_id == o.id %}selected{% endif %}>{{ t("{output}, {seconds} s", output=o.name, seconds=o.seconds) }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+        <span class="hint">{% if device_outputs %}{{ t("A device channel, such as a relay. It stays on for the time set for it on the Devices page, then the device switches it off.") }}{% else %}{{ t("No device yet: add one on the Devices page.") }}{% endif %}</span>
+        {% if devices_mode == "shadow" %}<span class="hint">{{ t("Test mode is on: recognitions are recorded, and the output isn't switched.") }}</span>{% endif %}
       </div>
     </section>
 

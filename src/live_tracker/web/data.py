@@ -26,7 +26,7 @@ from live_tracker.db import Camera, Event, audit
 from live_tracker.events import delete_events, in_period
 from live_tracker.i18n import Translator
 from live_tracker.web.common import (
-    DOOR_RESULTS, KINDS, flash, fragment, on_this_computer, require_admin, services, translator,
+    ACTIONS, KINDS, flash, fragment, on_this_computer, require_admin, services, translator,
 )
 
 router = APIRouter()
@@ -151,11 +151,11 @@ def _table(events: list[Event], pictures: dict[int, str], camera_names: dict[int
     """The records as a spreadsheet. Excel in Portuguese expects semicolons, and the mark at the start for accents."""
     text = io.StringIO()
     rows = csv.writer(text, delimiter=";" if t.language == "pt" else ",")
-    rows.writerow([t("Date"), t("Time"), t("Person"), t("Result"), t("Camera"), t("Door"), t("Match"), t("Picture")])
+    rows.writerow([t("Date"), t("Time"), t("Person"), t("Result"), t("Camera"), t("Device"), t("Match"), t("Picture")])
     for e in events:
         rows.writerow([
             e.at.date().isoformat(), e.at.strftime("%H:%M:%S"), e.person_name or "", t(KINDS.get(e.kind, e.kind)),
-            camera_names.get(e.camera_id, ""), t(DOOR_RESULTS[e.door]) if e.door in DOOR_RESULTS else "",
+            camera_names.get(e.camera_id, ""), t(ACTIONS[e.action]) if e.action in ACTIONS else "",
             t.number(e.score), pictures.get(e.id, ""),
         ])
     return text.getvalue().encode("utf-8-sig")

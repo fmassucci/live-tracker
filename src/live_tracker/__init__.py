@@ -1,1 +1,1 @@
-"""Face recognition at the staff entrance (MVP: one camera, shadow-mode door)."""
+"""Face recognition on cameras that switch devices for the people with access."""

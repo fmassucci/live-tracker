@@ -1,9 +1,9 @@
 """The recognition service: every enabled camera from the database, each running its AI model (face
-recognition with its liveness check, people and objects, fire and smoke, or falls), and the doors attached to them,
-plus the devices (ESP32 boards and Tuya modules) with their connections (devices/).
+recognition with its liveness check, people and objects, fire and smoke, or falls), and the device output each one
+switches, plus the devices (ESP32 boards and Tuya modules) with their connections (devices/).
 
 Run it with `live-tracker run`. It keeps working on its own: the web UI can be stopped or
-restarted without affecting the door. They share the database, and the web UI reads frames and
+restarted without affecting the devices. They share the database, and the web UI reads frames and
 status from this service's local port (preview.py). Stop the system, in Settings, stops both.
 """
 
@@ -25,7 +25,6 @@ from live_tracker.db import (
 from live_tracker.db import Camera as CameraRow
 from live_tracker.decision import Decision
 from live_tracker.devices.manager import DeviceManager
-from live_tracker.door import make_door
 from live_tracker.drawing import Overlay, render
 from live_tracker.embedders import load_embedder
 from live_tracker.events import EventLog, face_crop, purge_events
@@ -38,14 +37,15 @@ from live_tracker.liveness import load_liveness
 from live_tracker.models import model_path
 from live_tracker.dfine import DFineDetector
 from live_tracker.objects import ObjectAnalyzer, ObjectDetector, ObjectSettings, Sighting
-from live_tracker.people import door_allowed, load_gallery
+from live_tracker.people import load_gallery, with_access
 from live_tracker.pipeline import RateMeter, Recognizer, RepeatedFrames, Result
 from live_tracker.preview import PreviewServer
 from live_tracker.recording import APPEAR, DEFAULT_EVERY_S, RecordGate, RecordRule, decision_subject, last_recorded, thing
+from live_tracker.switching import make_switch
 
 log = logging.getLogger(__name__)
 
-DECISION_HOLD_S = 3.0  # how long the door screen shows "welcome" or "not recognized"
+DECISION_HOLD_S = 3.0  # how long the recognition screen shows "hello" or "not recognized"
 SYNC_EVERY_S = 1.0
 PURGE_EVERY_S = 3600.0
 # The model file behind each kind of record a camera makes of things, as Event.model.
@@ -64,7 +64,7 @@ class CameraSpec:
     id: int | None  # None for a camera given with --source, which isn't in the database
     name: str
     url: str
-    device: str = ""  # "door": recognizing someone with access opens it; "": nothing attached
+    output_id: int | None = None  # the device output it switches for someone with access (DeviceOutput.id)
     part: str = ""  # "": the whole picture; "top" or "bottom": one lens of a two-lens camera
     analysis: str = "faces"  # what runs on the picture: "faces", "objects", "fire", "falls", or "" for nothing
     settings: str = "{}"  # the analysis's own settings, as JSON (Camera.model_settings)
@@ -108,7 +108,7 @@ class CameraWorker:
         except Exception:  # a missing or damaged model file must not stop the other cameras
             log.exception("camera %s: its AI model can't be loaded", spec.name)
             self.model_missing = True
-        self.status: dict = {"name": spec.name, "device": spec.device, "online": False, "state": "offline",
+        self.status: dict = {"name": spec.name, "online": False, "state": "offline",
                              "model_missing": self.model_missing}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name=spec.channel, daemon=True)
@@ -157,7 +157,6 @@ class CameraWorker:
             self._publish(frame, result)
             self.status = {
                 "name": self.spec.name,
-                "device": self.spec.device,
                 "online": True,
                 "fps": round(rate.tick(), 1),
                 "size": f"{frame.image.shape[1]}x{frame.image.shape[0]}",
@@ -173,7 +172,7 @@ class CameraWorker:
         channel = self.spec.channel
         preview.publish(f"{channel}-raw", frame.image)
         preview.publish(channel, render(frame.image, result.overlays, []))
-        if self.spec.device == "door":  # the door screen shows only the main face's box, never names or scores
+        if self.spec.analysis == "faces":  # the recognition screen shows only the main face's box, never names
             boxes = [Overlay(o.face, "", o.tone) for o in result.overlays if o.face is result.face]
             preview.publish(f"{channel}-kiosk", render(frame.image, boxes, []))
 
@@ -188,10 +187,10 @@ class VisionService:
         self.gallery = Gallery(cfg.recognition.model, [], [])
         self._translate = Translator(cfg.web.language)
         self._liveness = load_liveness(cfg.paths.models_dir, cfg.liveness.threshold)
-        self._door = make_door(cfg.door.mode)
         self._events = EventLog(self.db, cfg.paths.data_dir)
         self.devices = DeviceManager(cfg, self.db)
-        self._door_allowed: set[str] = set()
+        self._switch = make_switch(cfg.devices.mode, self.devices)
+        self._with_access: set[str] = set()
         self._workers: dict[int | None, CameraWorker] = {}
         self._sources: dict[str, Camera] = {}  # by address: the cameras cut from one picture share it
         self._versions: dict[str, str | None] = {}
@@ -223,7 +222,7 @@ class VisionService:
         return Recognizer(self.cfg, detector, embedder, self.gallery, self._liveness, self._translate)
 
     def run(self) -> None:
-        log.info("recognition model %s, door mode %s", self.cfg.recognition.model, self.cfg.door.mode)
+        log.info("recognition model %s, devices mode %s", self.cfg.recognition.model, self.cfg.devices.mode)
         if self._liveness.name == "none":
             log.warning("no liveness check: a photo of a person would be accepted. Download it in Settings, AI models.")
         self.preview.start()
@@ -260,44 +259,44 @@ class VisionService:
         return last_recorded(self.db, spec.id, since) if spec.id is not None and since else {}
 
     def on_decision(self, spec: CameraSpec, frame: Frame, result: Result, keep: bool = True) -> None:
-        """Called from a camera's thread: opens an attached door when it should, and records the event unless
-        the camera's rule leaves this one out."""
+        """Called from a camera's thread: switches the camera's device when it should, and records the event
+        unless the camera's rule leaves this one out. The device is switched first, and the record says whether it
+        was; a device that doesn't answer holds this camera for a few seconds at most."""
         decision = result.decision
         assert decision is not None
         name = self.gallery.name(decision.person) if decision.person else None
-        door = ""  # no door attached to this camera
-        if spec.device == "door":
-            door = "kept"
-            if decision.kind == "recognized" and decision.person in self._door_allowed:
-                self._door.open(name or "")
-                door = "shadow" if self.cfg.door.mode == "shadow" else "opened"
+        action = ""  # the camera switches no device
+        if spec.output_id is not None:
+            action = "denied"
+            if decision.kind == "recognized" and decision.person in self._with_access:
+                action = self._switch.switch(name or "", spec.output_id)
         who = f" {name}" if name else ""
-        at_door = f", door {door}" if door else ""
+        device = f", device {action}" if action else ""
         if not keep:
             log.info("%s%s (score %.2f) at %s%s, no photo: the camera's rule", decision.kind, who, decision.score,
-                     spec.name, at_door)
+                     spec.name, device)
             return
-        self._record_face(spec, frame, result, decision, name, door)
-        log.info("%s%s (score %.2f) at %s%s", decision.kind, who, decision.score, spec.name, at_door)
+        self._record_face(spec, frame, result, decision, name, action)
+        log.info("%s%s (score %.2f) at %s%s", decision.kind, who, decision.score, spec.name, device)
 
     def on_staying(self, spec: CameraSpec, frame: Frame, result: Result) -> None:
         """Called from a camera's thread when the camera's rule wants another photo of someone recognized earlier
-        in this visit, still in the picture. It isn't a new visit: no door opens, and the record has no door."""
+        in this visit, still in the picture. It isn't a new visit: no device is switched, and the record says none."""
         staying = result.staying
         assert staying is not None and staying.person is not None
         name = self.gallery.name(staying.person)
-        self._record_face(spec, frame, result, staying, name, door="")
+        self._record_face(spec, frame, result, staying, name, action="")
         log.info("recognized %s (score %.2f) at %s, still there", name, staying.score, spec.name)
 
     def _record_face(self, spec: CameraSpec, frame: Frame, result: Result, decision: Decision, name: str | None,
-                     door: str) -> None:
+                     action: str) -> None:
         self._events.record(
             decision,
             render(frame.image, result.overlays, [], width=1280),
             face=face_crop(frame.image, result.face.box) if result.face else None,
             camera_id=spec.id,
             person_name=name,
-            door=door,
+            action=action,
             model=self.cfg.recognition.model,
             liveness=self._liveness.name,
         )
@@ -326,7 +325,7 @@ class VisionService:
                 return
             if versions[FACES_VERSION] != self._versions.get(FACES_VERSION):
                 self.gallery = load_gallery(session, self.cfg.recognition.model)
-                self._door_allowed = door_allowed(session)
+                self._with_access = with_access(session)
                 for worker in self._workers.values():
                     if isinstance(worker.analyzer, Recognizer):
                         worker.analyzer.gallery = self.gallery
@@ -340,11 +339,11 @@ class VisionService:
                         del self._workers[key]
             if models_changed or versions[CAMERAS_VERSION] != self._versions.get(CAMERAS_VERSION):
                 if self.source:
-                    specs = [CameraSpec(None, "source", self.source, device="door")]
+                    specs = [CameraSpec(None, "source", self.source)]
                 else:
                     rows = session.scalars(select(CameraRow).where(CameraRow.enabled).order_by(CameraRow.id))
-                    specs = [CameraSpec(c.id, c.name, c.url, device=c.device, part=c.part, analysis=c.analysis,
-                                        settings=c.model_settings, record_mode=c.record_mode,
+                    specs = [CameraSpec(c.id, c.name, c.url, output_id=c.output_id, part=c.part,
+                                        analysis=c.analysis, settings=c.model_settings, record_mode=c.record_mode,
                                         record_every_s=c.record_every_s,
                                         record_while_present=c.record_while_present) for c in rows]
                 self._apply(specs)
@@ -379,7 +378,7 @@ class VisionService:
                     self._sources[spec.url] = Camera(spec.url, reconnect_s, loop=self.source is None).start()
                 self._workers[key] = CameraWorker(spec, self, self._sources[spec.url])
                 self._workers[key].start()
-                log.info("camera %s started%s", spec.name, " (door)" if spec.device == "door" else "")
+                log.info("camera %s started%s", spec.name, " (switches a device)" if spec.output_id else "")
         if not self._workers:
             log.warning("no cameras: add one in the web UI (Cameras)")
 
@@ -387,7 +386,7 @@ class VisionService:
         return {
             "model": self.cfg.recognition.model,
             "liveness": self._liveness.name,
-            "door": self.cfg.door.mode,
+            "devices_mode": self.cfg.devices.mode,
             "people": len(self.gallery.people),
             "cameras": {str(spec_id or 0): worker.status for spec_id, worker in self._workers.items()},
             **self.devices.status(),

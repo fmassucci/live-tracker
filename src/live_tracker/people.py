@@ -1,6 +1,6 @@
 """The people registry: who the system knows, their face photos and embeddings.
 
-It is the base every module builds on (the door today, others later), and is shared by the web UI,
+It is the base every module builds on (devices today, others later), and is shared by the web UI,
 the recognition service and the command line.
 """
 
@@ -167,9 +167,9 @@ def load_gallery(session: Session, model: str, exclude: int | None = None) -> Ga
     return Gallery(model, [str(row.id) for row in rows], vectors, {str(row.id): row.name for row in rows})
 
 
-def door_allowed(session: Session) -> set[str]:
-    """Labels of the people the door may open for."""
-    return {str(i) for i in session.scalars(select(Person.id).where(Person.active, Person.door_access))}
+def with_access(session: Session) -> set[str]:
+    """Labels of the people whose recognition switches the camera's device."""
+    return {str(i) for i in session.scalars(select(Person.id).where(Person.active, Person.access))}
 
 
 def _shrink(image: np.ndarray) -> np.ndarray:

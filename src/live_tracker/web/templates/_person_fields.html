@@ -20,6 +20,6 @@
   <textarea id="notes" name="notes">{{ form.notes or '' }}</textarea>
 </div>
 <label class="check">
-  <input type="checkbox" name="door_access" value="true" {% if form.get('door_access', True) %}checked{% endif %}>
-  <span>{{ t("May open the staff door") }}<span class="hint">{{ t("Turn off for people who should be recognized but not let in.") }}</span></span>
+  <input type="checkbox" name="access" value="true" {% if form.get('access', True) %}checked{% endif %}>
+  <span>{{ t("Has access") }}<span class="hint">{{ t("Recognizing them switches the device linked to the camera. Turn off for people who should be recognized without switching anything.") }}</span></span>
 </label>

@@ -9,6 +9,10 @@ A module reports numbered values (data points): a switch per channel, and its co
 back off on the module itself. A pulse switches the channel on, then sets its countdown, each confirmed; without the
 countdown's confirmation it switches the channel off again, and a watchdog switches off any pulse that outlasts its
 time.
+
+A module also speaks unasked, as soon as a relay changes: when its countdown ends, or by its wall switch or Smart
+Life. tinytuya takes the first message after a request for its answer, so those are read as they come, and never
+taken for an answer.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import json
 import logging
 import math
 import re
+import select
 import socket
 import threading
 import time
@@ -30,7 +35,9 @@ from live_tracker.devices import BAD_KEY, NO_ANSWER, NO_TIMER, NOT_FOUND, OFFLIN
 log = logging.getLogger(__name__)
 
 PROTOCOLS = ("3.4", "3.3", "3.5", "3.1")  # tried in this order until the module answers
-POLL_S = 3.0  # how often its state is read
+POLL_S = 3.0  # how often its state is read; what it says unasked shows at once
+LISTEN_S = 0.5  # between polls, how long a wait for it to speak lasts before checking whether to stop
+UNASKED_MAX = 10  # messages read in a row before asking it something
 RETRY_S = 5.0  # after it stops answering
 SOCKET_TIMEOUT_S = 2.0
 WATCH_GRACE_S = 2.0  # how long past its time a pulse may still be on before it is switched off from here
@@ -239,16 +246,16 @@ class TuyaModule:
         with self._lock:
             if self._device is None:
                 raise DeviceError(OFFLINE)
-            switched = self._device.set_value(output.key, True)
+            switched = self._ask(lambda device: device.set_value(output.key, True), output.key)
             if _value(switched, output.key) is not True:
                 self._watch(output.key, 0)  # it may have switched on all the same
                 self._drop("didn't confirm switching on: %s", switched)
                 raise DeviceError(NO_ANSWER, str(switched))
             self._watch(output.key, seconds)
-            timed = self._device.set_value(timer, seconds)
+            timed = self._ask(lambda device: device.set_value(timer, seconds), timer)
             left = _value(timed, timer)
             if not (isinstance(left, int) and 0 < left <= seconds):
-                off = self._device.set_value(output.key, False)
+                off = self._ask(lambda device: device.set_value(output.key, False), output.key)
                 if _value(off, output.key) is not False:
                     self._drop("didn't confirm its countdown, nor switching off: %s", off)
                 log.warning("%s: %s didn't confirm its countdown (%s), switched off", self.spec.name, key, timed)
@@ -258,20 +265,55 @@ class TuyaModule:
         log.info("%s: %s on for %d s", self.spec.name, key, seconds)
 
     def _run(self) -> None:
+        switches = [output.key for output in self.spec.outputs]
         while not self._stop.is_set():
             if self._device is None and not self._open():
                 self._stop.wait(RETRY_S)
                 continue
             with self._lock:
-                device = self._device
-                reply = device.status() if device else None
+                reply = self._ask(lambda device: device.status(), *switches) if self._device else None
             if not isinstance(reply, dict) or "dps" not in reply:
                 self._drop("stopped answering: %s", reply)
                 self._stop.wait(RETRY_S)
                 continue
             self._update(reply)
             self._end_overdue_pulses()
-            self._stop.wait(POLL_S)
+            self._listen(POLL_S)
+
+    def _ask(self, request: Callable[[tinytuya.Device], object], *dps: str) -> object:
+        """The module's answer to a request: the first message with these data points. What it said unasked
+        before is read first, and what it says unasked meanwhile only updates the state: taken for answers, those
+        put every answer one late on 2026-10-27, and the module was dropped as gone. Call with the lock."""
+        self._read_unasked()
+        device = self._device
+        reply = request(device)
+        until = time.monotonic() + SOCKET_TIMEOUT_S
+        while (isinstance(reply, dict) and "dps" in reply and not all(dp in reply["dps"] for dp in dps)
+               and time.monotonic() < until):
+            self._update(reply)
+            reply = device.receive()  # None once nothing comes for SOCKET_TIMEOUT_S
+        return reply
+
+    def _read_unasked(self) -> None:
+        """Takes up what the module said without being asked and wasn't read yet. Call with the lock."""
+        for _ in range(UNASKED_MAX):
+            if self._device is None or not _unread(self._device, 0):
+                return
+            reply = self._device.receive()
+            if isinstance(reply, dict) and "dps" in reply:
+                self._update(reply)
+
+    def _listen(self, seconds: float) -> None:
+        """Waits for the next poll, taking up what the module says as it says it: a relay switched off by its
+        countdown, or by its wall switch or Smart Life, shows on the Devices page at once."""
+        until = time.monotonic() + seconds
+        while not self._stop.is_set() and (left := until - time.monotonic()) > 0:
+            unread = _unread(self._device, min(left, LISTEN_S))
+            if unread is None:  # no connection to listen on: the next poll sees to it
+                self._stop.wait(left)
+            elif unread:
+                with self._lock:
+                    self._read_unasked()
 
     def _watch(self, key: str, seconds: int) -> None:
         self._deadlines[key] = time.monotonic() + seconds + WATCH_GRACE_S
@@ -288,7 +330,7 @@ class TuyaModule:
                 del self._deadlines[key]  # over, as it should be
                 continue
             with self._lock:
-                reply = self._device.set_value(key, False) if self._device else None
+                reply = self._ask(lambda device: device.set_value(key, False), key) if self._device else None
             if _value(reply, key) is False:
                 log.warning("%s: %s was still on after its pulse: switched off from here", self.spec.name, key)
                 self._state.outputs[key] = False
@@ -349,6 +391,17 @@ class TuyaModule:
                 device.close()
             except OSError:
                 pass
+
+
+def _unread(device: tinytuya.Device | None, timeout: float) -> bool | None:
+    """Whether the module said something not read yet, waiting up to `timeout` for it; None without a connection."""
+    sock = getattr(device, "socket", None)
+    if sock is None:
+        return None
+    try:
+        return bool(select.select([sock], [], [], timeout)[0])
+    except (OSError, ValueError):  # closed meanwhile
+        return None
 
 
 def _value(reply: object, dp: str) -> object:

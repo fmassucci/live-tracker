@@ -25,7 +25,7 @@
   <section class="settings-block" id="identity">
     <div>
       <h2>{{ t("Name and logo") }}</h2>
-      <p>{{ t("Shown at the top of every page, on the sign-in page and on the door screen.") }}</p>
+      <p>{{ t("Shown at the top of every page, on the sign-in page and on the recognition screen.") }}</p>
     </div>
     <div>
       <div class="logo-sample" aria-hidden="true">
@@ -172,30 +172,30 @@
           {% endif %}
         </fieldset>
       </div>
-      <div class="subpanel" id="door-screen" style="margin-bottom: 18px">
-        <h3>{{ t("Door screen") }}</h3>
-        {% for c in door_cameras %}
+      <div class="subpanel" id="screen" style="margin-bottom: 18px">
+        <h3>{{ t("Recognition screen") }}</h3>
+        {% for c in screen_cameras %}
         <div class="field">
-          <label for="door-{{ c.id }}">{{ c.name }}</label>
+          <label for="screen-{{ c.id }}">{{ c.name }}</label>
           <div class="copy-field">
-            <input type="text" id="door-{{ c.id }}" value="{{ door_base_url }}/door?camera={{ c.id }}&key={{ door_key }}" readonly>
-            <button type="button" class="button button-quiet" data-copy="door-{{ c.id }}" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
-            <a class="button button-quiet" href="/door?camera={{ c.id }}&key={{ door_key }}" target="_blank" rel="noopener" aria-label="{{ t('Open') }}">{{ icon("external") }}<span class="copy-label">{{ t("Open") }}</span></a>
+            <input type="text" id="screen-{{ c.id }}" value="{{ screen_base_url }}/screen?camera={{ c.id }}&key={{ screen_key }}" readonly>
+            <button type="button" class="button button-quiet" data-copy="screen-{{ c.id }}" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
+            <a class="button button-quiet" href="/screen?camera={{ c.id }}&key={{ screen_key }}" target="_blank" rel="noopener" aria-label="{{ t('Open') }}">{{ icon("external") }}<span class="copy-label">{{ t("Open") }}</span></a>
           </div>
         </div>
         {% else %}
-        <p class="muted">{{ t("Add a door camera first.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
+        <p class="muted">{{ t("Add a camera with face recognition first.") }} <a href="/cameras/new">{{ t("Add a camera") }}</a></p>
         {% endfor %}
-        {% if door_cameras %}
-        <p class="hint" style="margin-bottom: 12px">{{ t("Open this address on the tablet at the entrance: it tells people whether they were recognized. Anyone with the address sees the door camera, so keep it private.") }}</p>
-        <form method="post" action="/settings/door-screen/new-key">
+        {% if screen_cameras %}
+        <p class="hint" style="margin-bottom: 12px">{{ t("Open this address on a tablet beside the camera: it tells people whether they were recognized. Anyone with the address sees the camera, so keep it private.") }}</p>
+        <form method="post" action="/settings/screen/new-key">
           <button class="button button-quiet button-small">{{ t("Create a new address") }}</button>
         </form>
         {% endif %}
       </div>
       <dl class="facts">
-        <dt>{{ t("Door") }}</dt>
-        <dd>{{ t("Test mode: decisions are only recorded") if cfg.door.mode == "shadow" else t("Opens for recognized people") }}</dd>
+        <dt>{{ t("Devices") }}</dt>
+        <dd>{{ t("Test mode: decisions are only recorded") if cfg.devices.mode == "shadow" else t("Switched for people with access") }}</dd>
         <dt>{{ t("Recognition model") }}</dt>
         <dd>{{ cfg.recognition.model }}</dd>
         <dt>{{ t("Records kept for") }}</dt>

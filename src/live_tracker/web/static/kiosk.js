@@ -1,4 +1,4 @@
-// Door screen: asks for the door's state a few times a second and shows it in large type.
+// Recognition screen: asks for the camera's state a few times a second and shows it in large type.
 (() => {
   const body = document.body;
   const title = document.getElementById("title");

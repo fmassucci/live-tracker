@@ -111,7 +111,7 @@ def test_adding_a_person_with_a_photo(client):
     ok, png = cv2.imencode(".png", np.full((480, 480, 3), 128, np.uint8) + np.random.default_rng(1).integers(0, 60, (480, 480, 3)).astype(np.uint8))
     response = client.post(
         "/people/new",
-        data={"name": "João da Silva", "category": "employee", "job_title": "Padeiro", "door_access": "true", "informed": "true"},
+        data={"name": "João da Silva", "category": "employee", "job_title": "Padeiro", "access": "true", "informed": "true"},
         files=[("photos", ("joao.png", png.tobytes(), "image/png"))],
     )
     assert response.status_code == 200
@@ -151,13 +151,16 @@ def test_settings_shows_the_addresses_to_open_the_app(client, monkeypatch):
     assert "Se o primeiro endereço não abrir, tente o próximo." in text
 
 
-def test_the_door_screen_address_is_the_one_the_tablet_opens(client, app, monkeypatch):
+def test_the_recognition_screen_address_is_the_one_the_tablet_opens(client, app, monkeypatch):
     monkeypatch.setattr("live_tracker.web.common.local_ipv4", lambda: ["192.168.0.19"])
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Porta", url="0", device="door"))
+        session.add(Camera(name="Porta", url="0", analysis="faces"))
+        session.add(Camera(name="Caixa", url="1", analysis="objects"))  # recognizes nobody: no screen
         session.flush()
-        key = get_setting(session, "door_screen_key")
-    assert f'value="http://192.168.0.19:8000/door?camera=1&key={key}"' in client.get("/settings").text
+        key = get_setting(session, "screen_key")
+    settings = client.get("/settings").text
+    assert f'value="http://192.168.0.19:8000/screen?camera=1&key={key}"' in settings
+    assert "/screen?camera=2" not in settings
 
 
 def test_settings_says_when_only_this_computer_can_open_the_app(client, cfg):
@@ -354,7 +357,7 @@ def _record(app, cfg, at: datetime, kind: str = "recognized", name: str | None =
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"picture")
     with app.state.services.db.session() as session:
-        session.add(Event(at=at, kind=kind, person_name=name, score=0.712, snapshot=snapshot, door="shadow",
+        session.add(Event(at=at, kind=kind, person_name=name, score=0.712, snapshot=snapshot, action="shadow",
                           model="auraface", liveness="none"))
     return snapshot
 
@@ -369,9 +372,9 @@ def test_records_download_as_a_spreadsheet_and_pictures(app, cfg, client):
     assert sorted(archive.namelist()) == sorted(["Registros_2026-10-22_2026-10-23.csv", first, second])
     table = archive.read("Registros_2026-10-22_2026-10-23.csv").decode("utf-8-sig").splitlines()
     assert table == [
-        "Data;Hora;Pessoa;Resultado;Câmera;Porta;Semelhança;Imagem",
-        f"2026-10-22;07:58:00;Ana;Reconhecido;;modo de teste, porta continuou fechada;0,71;{first}",
-        f"2026-10-23;08:01:00;;Não reconhecido;;modo de teste, porta continuou fechada;0,71;{second}",
+        "Data;Hora;Pessoa;Resultado;Câmera;Dispositivo;Semelhança;Imagem",
+        f"2026-10-22;07:58:00;Ana;Reconhecido;;modo de teste, nada acionado;0,71;{first}",
+        f"2026-10-23;08:01:00;;Não reconhecido;;modo de teste, nada acionado;0,71;{second}",
     ]
     assert client.post("/settings/data/export", data={"start": "2026-11-01"}).url.path == "/settings"  # nothing to send
 
@@ -416,17 +419,56 @@ def test_a_camera_has_an_ai_model_and_an_attached_device(client, app, cfg, monke
         place_model_file(cfg.paths.models_dir, monkeypatch, key)
     form = client.get("/cameras/new").text
     assert "Modelo de IA" in form and "Reconhecimento facial" in form and "Dispositivo ligado" in form
-    client.post("/cameras/new", data={"name": "Cozinha", "url": "0", "analysis": "faces", "device": ""})
-    cameras = client.post("/cameras/new", data={"name": "Porta", "url": "1", "analysis": "faces", "device": "door"})
-    assert cameras.text.count("Parar gravação") == 2  # every camera records
-    assert cameras.text.count("Abre a porta") == 1
+    assert "Nenhum dispositivo ainda" in form
+    client.post("/cameras/new", data={"name": "Cozinha", "url": "0", "analysis": "faces"})
     with app.state.services.db.session() as session:
-        assert [c.device for c in session.scalars(select(Camera).order_by(Camera.id))] == ["", "door"]
+        output_id = _output(session)
+    cameras = client.post("/cameras/new", data={"name": "Porta", "url": "1", "analysis": "faces",
+                                                "output_id": str(output_id)})
+    assert cameras.text.count("Parar gravação") == 2  # every camera records
+    assert cameras.text.count("Aciona Módulo, Fechadura") == 1
+    with app.state.services.db.session() as session:
+        assert [c.output_id for c in session.scalars(select(Camera).order_by(Camera.id))] == [None, output_id]
+
+
+def _output(session) -> int:
+    """A module's channel for a camera to switch."""
+    device = Device(kind="tuya", uid="eb2002", name="Módulo",
+                    outputs=[DeviceOutput(key="1", name="Fechadura", kind="lock", timer_dp=9)])
+    session.add(device)
+    session.flush()
+    return device.outputs[0].id
+
+
+def test_a_camera_switches_a_devices_output(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Device(kind="tuya", uid="eb2002", name="Módulo", outputs=[
+            DeviceOutput(key="1", name="Fechadura", kind="lock", pulse_ms=3000, timer_dp=9),
+            DeviceOutput(key="2", name="Luz", kind="light", timer_dp=10)]))
+        session.add(Camera(id=1, name="Porta", url="0", analysis="faces"))
+        session.add(Camera(id=2, name="Fundos", url="1", analysis=""))
+        session.flush()
+        lock_id = session.scalar(select(DeviceOutput.id).where(DeviceOutput.key == "1"))
+    form = client.get("/cameras/1").text
+    assert "Nenhuma saída" in form and '<optgroup label="Módulo">' in form and "Fechadura, 3 s" in form
+    assert "door" not in form.lower()
+    client.post("/cameras/1", data={"name": "Porta", "url": "0", "analysis": "faces", "output_id": str(lock_id)})
+    client.post("/cameras/2", data={"name": "Fundos", "url": "1", "analysis": "",
+                                    "output_id": str(lock_id)})  # left in the hidden choice: only faces switch it
+    assert "Aciona Módulo, Fechadura" in client.get("/cameras").text
+    with app.state.services.db.session() as session:
+        assert [c.output_id for c in session.scalars(select(Camera).order_by(Camera.id))] == [lock_id, None]
+        session.delete(session.get(Device, session.scalar(select(Device.id))))
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, 1).output_id is None  # its device was removed
+    gone = client.post("/cameras/1", data={"name": "Porta", "url": "0", "analysis": "faces",
+                                           "output_id": str(lock_id)})
+    assert gone.status_code == 400 and "Essa saída foi removida" in gone.text
 
 
 def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Porta", url="0", device="door"))
+        session.add(Camera(name="Porta", url="0"))
     assert "Parar gravação" in client.get("/cameras").text
     today = client.post("/cameras/1/stop", data={"next": "/"})  # follows the redirect back to Today
     assert "Gravação parada: Porta." in today.text
@@ -451,7 +493,7 @@ class SeenVision(NoVision):
 def test_a_one_lens_camera_is_not_offered_a_split(client, app):
     app.state.services.vision = SeenVision("1920x1080")
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.38:554/onvif1", device="door"))
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.38:554/onvif1"))
     edit = client.get("/cameras/1").text
     assert "Separar em duas câmeras" not in edit and "Metade de cima" not in edit
 
@@ -459,15 +501,16 @@ def test_a_one_lens_camera_is_not_offered_a_split(client, app):
 def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
     app.state.services.vision = SeenVision("1920x2160")  # two 1920x1080 lenses, one above the other
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.37:554/onvif1", device="door"))
+        output_id = _output(session)
+        session.add(Camera(name="Jortan", url="rtsp://admin:segredo@192.168.0.37:554/onvif1", output_id=output_id))
     assert "Separar em duas câmeras" in client.get("/cameras/1").text
     cameras = client.post("/cameras/1/split")
     assert "Jortan agora são duas câmeras, uma para cada lente." in cameras.text
     assert cameras.text.count("Parar gravação") == 2  # both lenses record
     with app.state.services.db.session() as session:
         top, bottom = session.scalars(select(Camera).order_by(Camera.id)).all()
-        assert (top.name, top.part, top.device) == ("Jortan (cima)", "top", "door")
-        assert (bottom.name, bottom.part, bottom.device) == ("Jortan (baixo)", "bottom", "")  # the door opens once
+        assert (top.name, top.part, top.output_id) == ("Jortan (cima)", "top", output_id)
+        assert (bottom.name, bottom.part, bottom.output_id) == ("Jortan (baixo)", "bottom", None)  # switched once
         assert bottom.url == top.url  # the same address: the camera is still read once
     edit = client.get("/cameras/1").text
     assert "Separar em duas câmeras" not in edit and "Metade de cima" in edit
@@ -475,13 +518,13 @@ def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
 
 def test_open_pages_can_follow_every_camera(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(name="Porta", url="0", device="door"))
+        session.add(Camera(name="Porta", url="0"))
     states = client.get("/cameras-states").json()
     assert states == {"1": {"state": "service-down", "label": "Serviço de reconhecimento parado"}}
 
 
 def _event(kind: str, name: str | None, at: datetime | None = None) -> Event:
-    return Event(at=at or datetime.now(), kind=kind, person_name=name, score=0.7, door="shadow", model="auraface",
+    return Event(at=at or datetime.now(), kind=kind, person_name=name, score=0.7, action="shadow", model="auraface",
                  liveness="none")
 
 
@@ -492,7 +535,7 @@ def _at_camera(event: Event, camera_id: int) -> Event:
 
 def test_today_lists_who_came_in_and_shows_faces_not_recognized_only_when_there_are_some(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(id=1, name="Porta", url="0", analysis="faces", device="door"))
+        session.add(Camera(id=1, name="Porta", url="0", analysis="faces"))
     assert "Não reconhecidos hoje" not in client.get("/").text
     with app.state.services.db.session() as session:
         session.add_all([_at_camera(_event("recognized", "Ana Souza"), 1), _at_camera(_event("unknown", None), 1)])
@@ -503,7 +546,7 @@ def test_today_lists_who_came_in_and_shows_faces_not_recognized_only_when_there_
 
 def test_each_person_shows_when_they_arrived_and_were_last_seen(client, app):
     with app.state.services.db.session() as session:
-        session.add(Camera(id=1, name="Porta", url="0", analysis="faces", device="door"))
+        session.add(Camera(id=1, name="Porta", url="0", analysis="faces"))
 
     def recognized_at(hour: int, minute: int) -> None:
         with app.state.services.db.session() as session:
@@ -523,16 +566,16 @@ def test_each_person_shows_when_they_arrived_and_were_last_seen(client, app):
 
 def test_each_face_camera_lists_the_people_it_recognized(client, app):
     with app.state.services.db.session() as session:
-        session.add_all([Camera(id=1, name="Entrada", url="0", analysis="faces", device="door"),
+        session.add_all([Camera(id=1, name="Entrada", url="0", analysis="faces", output_id=_output(session)),
                          Camera(id=2, name="Cozinha", url="1", analysis="faces")])
         session.flush()
-        for at, camera_id in ((time(7, 58), 1), (time(13, 40), 2)):  # the kitchen has no door
+        for at, camera_id in ((time(7, 58), 1), (time(13, 40), 2)):  # the kitchen switches nothing
             session.add(_at_camera(_event("recognized", "Ana Souza", datetime.combine(date.today(), at)), camera_id))
     today = client.get("/").text
-    door, kitchen = today.split('id="camera-2"')  # the door camera's row comes first, as on Cameras
-    assert ">07:58</time>" in door and ">13:40</time>" not in door
+    entrance, kitchen = today.split('id="camera-2"')  # a camera that switches a device comes first, as on Cameras
+    assert ">07:58</time>" in entrance and ">13:40</time>" not in entrance
     assert ">13:40</time>" in kitchen and ">07:58</time>" not in kitchen
-    assert 'href="#camera-1"' in door and 'href="#camera-2"' in door  # the list of cameras beside the menu
+    assert 'href="#camera-1"' in entrance and 'href="#camera-2"' in entrance  # the list of cameras beside the menu
     with app.state.services.db.session() as session:
         session.get(Camera, 2).enabled, session.get(Camera, 2).analysis = False, ""
     assert 'href="#camera-1"' not in client.get("/").text  # one camera: no list
@@ -543,7 +586,7 @@ def test_a_camera_shows_what_it_recorded_today_also_with_an_earlier_model(client
         session.add(Camera(id=1, name="Salão", url="0", analysis="falls"))  # it recognized faces this morning
         session.flush()
         session.add(_at_camera(_event("recognized", "Ana Souza"), 1))
-        session.add(Event(at=datetime.now(), kind="detected", label="fall", count=1, score=0.8, camera_id=1, door="",
+        session.add(Event(at=datetime.now(), kind="detected", label="fall", count=1, score=0.8, camera_id=1, action="",
                           model="yolov8s-pose", liveness="none"))
     today = client.get("/").text
     assert "Ana Souza" in today and "Pessoas hoje" in today
@@ -565,16 +608,16 @@ def test_today_shows_every_camera_with_a_model_or_turned_on(client, app):
             Camera(id=1, name="Caixa", url="0", analysis="objects"),
             Camera(id=2, name="Fundos", url="1", analysis=""),  # only the picture
             Camera(id=3, name="Garagem", url="2", analysis="", enabled=False),  # off, without a model: not shown
-            Camera(id=4, name="Porta", url="3", analysis="faces", device="door", enabled=False),  # stopped
+            Camera(id=4, name="Porta", url="3", analysis="faces", output_id=_output(session), enabled=False),  # stopped
         ])
         session.flush()
         for label, count in (("person", 1), ("person", 2), ("dining_table", 1)):
             session.add(Event(at=datetime.now(), kind="detected", label=label, count=count, score=0.8, camera_id=1,
-                              door="", model="yolox", liveness="none"))
+                              action="", model="yolox", liveness="none"))
     app.state.services.vision = OnlineVision()
     today = client.get("/").text
     assert "Caixa" in today and "Fundos" in today and "Porta" in today and "Garagem" not in today
-    assert _index(today) == ["camera-4", "camera-1", "camera-2"]  # beside the menu, the door first as on Cameras
+    assert _index(today) == ["camera-4", "camera-1", "camera-2"]  # beside the menu, switching first as on Cameras
     assert re.search(r"Pessoa<span>2</span>.*Mesa<span>1</span>", today, re.S)  # what it found, the most first
     assert "Encontrado hoje" in today and "Só a imagem ao vivo" in today and "Iniciar gravação" in today
     assert today.count('data-stream-for="') == 2  # a few cameras play as video
@@ -591,7 +634,7 @@ def test_people_show_when_any_face_camera_last_saw_them(client, app):
         session.add(ana)
         session.flush()
         seen = _event("recognized", "Ana Souza", datetime(2026, 10, 20, 9, 30))
-        seen.person_id, seen.door = ana.id, ""  # a camera without a door
+        seen.person_id, seen.action = ana.id, ""  # a camera without a device
         session.add(seen)
     assert "Visto por último: 20/10 09:30" in client.get("/people").text
 
@@ -613,15 +656,15 @@ def test_live_frame_state_is_quiet_without_the_recognition_service(client):
     assert client.get("/cameras/1/state").json() == {"tone": "idle", "label": ""}
 
 
-def test_door_screen_needs_its_secret_address(client, app):
+def test_the_recognition_screen_needs_its_secret_address(client, app):
     db = app.state.services.db
     with db.session() as session:
-        session.add(Camera(name="Porta", url="0", device="door"))
+        session.add(Camera(name="Porta", url="0"))
         session.flush()
-        key = get_setting(session, "door_screen_key")
-    assert client.get("/door?camera=1&key=wrong").status_code == 404
-    assert client.get(f"/door?camera=1&key={key}").status_code == 200
-    state = client.get(f"/door/state?camera=1&key={key}").json()
+        key = get_setting(session, "screen_key")
+    assert client.get("/screen?camera=1&key=wrong").status_code == 404
+    assert client.get(f"/screen?camera=1&key={key}").status_code == 200
+    state = client.get(f"/screen/state?camera=1&key={key}").json()
     assert state["tone"] == "bad"  # the recognition service isn't running in tests
 
 

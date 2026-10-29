@@ -1,4 +1,5 @@
-"""The web UI app: people, today's entries, records, cameras, devices, live view and settings, plus the door screen.
+"""The web UI app: people, today's entries, records, cameras, devices, live view and settings, plus the
+recognition screen.
 
 Every text is English in the code and templates, and translated through live_tracker.i18n.
 """
@@ -34,7 +35,7 @@ def create_app(cfg: Config) -> FastAPI:
     db.migrate()
     with db.session() as session:
         secret = ensure_setting(session, "session_secret", lambda: secrets.token_urlsafe(32))
-        ensure_setting(session, "door_screen_key", lambda: secrets.token_urlsafe(12))
+        ensure_setting(session, "screen_key", lambda: secrets.token_urlsafe(12))
         if ensure_default_user(session):
             log.warning("created the first account: user admin, password admin. Change the password in Settings.")
 

@@ -5,11 +5,12 @@ import numpy as np
 import pytest
 from sqlalchemy import select
 
-from live_tracker import service
+from live_tracker import service, switching
 from live_tracker.camera import Frame
 from live_tracker.db import MODELS_VERSION, STOP_REQUESTS, Event, bump
 from live_tracker.db import Camera as CameraRow
 from live_tracker.decision import Decision
+from live_tracker.devices import OFFLINE, DeviceError
 from live_tracker.pipeline import Result
 from live_tracker.objects import ObjectAnalyzer, Sighting
 from live_tracker.recording import DAILY, INTERVAL, RecordGate, RecordRule, thing
@@ -33,12 +34,27 @@ class FakeSource:
         return None
 
 
-class FakeDoor:
+class FakeSwitch:
     def __init__(self) -> None:
-        self.opened: list[str] = []
+        self.switched: list[tuple[str, int]] = []
 
-    def open(self, name: str) -> None:
-        self.opened.append(name)
+    def switch(self, person: str, output_id: int) -> str:
+        self.switched.append((person, output_id))
+        return "shadow"
+
+
+class FakeDevices:
+    """The device manager, with one module that may be offline."""
+
+    def __init__(self) -> None:
+        self.pulsed: list[int] = []
+        self.offline = False
+
+    def pulse_output(self, output_id: int) -> str:
+        if self.offline:
+            raise DeviceError(OFFLINE)
+        self.pulsed.append(output_id)
+        return "Módulo"
 
 
 def _vision(cfg, monkeypatch) -> VisionService:
@@ -71,26 +87,48 @@ def test_the_two_lenses_of_one_picture_share_one_connection(cfg, monkeypatch):
         vision._apply([])
 
 
-def test_every_camera_records_but_only_a_door_camera_opens_it(cfg, monkeypatch):
+def test_every_camera_records_but_only_a_camera_with_an_output_switches_it(cfg, monkeypatch):
     vision = _vision(cfg, monkeypatch)
-    vision._door, vision._door_allowed = FakeDoor(), {"7"}
+    vision._switch, vision._with_access = FakeSwitch(), {"7"}
     frame = Frame(np.zeros((120, 160, 3), np.uint8), seq=1, captured_at=0.0, signature=b"")
     recognized = Result(decision=Decision("recognized", "7", 0.8))
     vision.on_decision(CameraSpec(None, "Kitchen", "rtsp://kitchen"), frame, recognized)
-    assert vision._door.opened == []
-    vision.on_decision(CameraSpec(None, "Staff door", "rtsp://door", device="door"), frame, recognized)
-    assert len(vision._door.opened) == 1
+    assert vision._switch.switched == []
+    vision.on_decision(CameraSpec(None, "Entrance", "rtsp://entrance", output_id=3), frame, recognized)
+    assert vision._switch.switched == [("7", 3)]
     with vision.db.session() as session:
-        assert [event.door for event in session.scalars(select(Event).order_by(Event.id))] == ["", "shadow"]
+        assert [event.action for event in session.scalars(select(Event).order_by(Event.id))] == ["", "shadow"]
 
 
-def test_the_door_opens_even_when_the_rule_keeps_no_photo(cfg, monkeypatch):
+def test_a_live_camera_switches_its_output_and_records_whether_it_did(cfg, monkeypatch):
     vision = _vision(cfg, monkeypatch)
-    vision._door, vision._door_allowed = FakeDoor(), {"7"}
+    devices = FakeDevices()
+    vision._switch, vision._with_access = switching.make_switch("live", devices), {"7"}
+    frame = Frame(np.zeros((120, 160, 3), np.uint8), seq=1, captured_at=0.0, signature=b"")
+    entrance = CameraSpec(None, "Entrance", "rtsp://entrance", output_id=3)
+    vision.on_decision(entrance, frame, Result(decision=Decision("recognized", "7", 0.8)))
+    vision.on_decision(entrance, frame, Result(decision=Decision("unknown", None, 0.2)))
+    vision.on_decision(entrance, frame, Result(decision=Decision("recognized", "8", 0.8)))  # without access
+    assert devices.pulsed == [3]
+    devices.offline = True
+    vision.on_decision(entrance, frame, Result(decision=Decision("recognized", "7", 0.8)))
+    no_output = CameraSpec(None, "Kitchen", "rtsp://kitchen")
+    vision.on_decision(no_output, frame, Result(decision=Decision("recognized", "7", 0.8)))
+    assert devices.pulsed == [3]
+    with vision.db.session() as session:
+        actions = [event.action for event in session.scalars(select(Event).order_by(Event.id))]
+    assert actions == ["switched", "denied", "denied", "failed", ""]
+    with pytest.raises(ValueError):
+        switching.make_switch("open", devices)  # a typo in the config
+
+
+def test_the_output_switches_even_when_the_rule_keeps_no_photo(cfg, monkeypatch):
+    vision = _vision(cfg, monkeypatch)
+    vision._switch, vision._with_access = FakeSwitch(), {"7"}
     frame = Frame(np.zeros((120, 160, 3), np.uint8), seq=1, captured_at=0.0, signature=b"")
     recognized = Result(decision=Decision("recognized", "7", 0.8))
-    vision.on_decision(CameraSpec(None, "Staff door", "rtsp://door", device="door"), frame, recognized, keep=False)
-    assert len(vision._door.opened) == 1
+    vision.on_decision(CameraSpec(None, "Entrance", "rtsp://entrance", output_id=3), frame, recognized, keep=False)
+    assert len(vision._switch.switched) == 1
     with vision.db.session() as session:
         assert session.scalars(select(Event)).all() == []
 
@@ -111,16 +149,16 @@ def test_a_camera_keeps_photos_by_its_rule_also_after_a_restart(cfg, monkeypatch
     assert service.CameraWorker(every, vision, FakeSource("0")).gate.rule == RecordRule(INTERVAL, 600, False)
 
 
-def test_someone_still_there_is_photographed_again_without_opening_the_door(cfg, monkeypatch):
+def test_someone_still_there_is_photographed_again_without_switching_the_output(cfg, monkeypatch):
     vision = _vision(cfg, monkeypatch)
-    vision._door, vision._door_allowed = FakeDoor(), {"7"}
+    vision._switch, vision._with_access = FakeSwitch(), {"7"}
     frame = Frame(np.zeros((120, 160, 3), np.uint8), seq=1, captured_at=0.0, signature=b"")
     still_there = Result(staying=Decision("recognized", "7", 0.8, staying=True))
-    vision.on_staying(CameraSpec(None, "Staff door", "rtsp://door", device="door"), frame, still_there)
-    assert vision._door.opened == []
+    vision.on_staying(CameraSpec(None, "Entrance", "rtsp://entrance", output_id=3), frame, still_there)
+    assert vision._switch.switched == []
     with vision.db.session() as session:
         event = session.scalars(select(Event)).one()
-        assert (event.kind, event.door, event.score) == ("recognized", "", 0.8)  # a photo, not an entry
+        assert (event.kind, event.action, event.score) == ("recognized", "", 0.8)  # a photo, not an entry
 
 
 class Frames:
@@ -148,11 +186,11 @@ class Script:
         return next(self.results)
 
 
-@pytest.mark.parametrize("while_present, doors", [(True, ["shadow", ""]), (False, ["shadow"])])
-def test_a_person_who_stays_is_photographed_again_if_the_rule_repeats(cfg, monkeypatch, while_present, doors):
+@pytest.mark.parametrize("while_present, actions", [(True, ["shadow", ""]), (False, ["shadow"])])
+def test_a_person_who_stays_is_photographed_again_if_the_rule_repeats(cfg, monkeypatch, while_present, actions):
     vision = _vision(cfg, monkeypatch)
-    vision._door, vision._door_allowed = FakeDoor(), {"7"}
-    spec = CameraSpec(None, "Staff door", "rtsp://door", device="door", record_mode=INTERVAL, record_every_s=600,
+    vision._switch, vision._with_access = FakeSwitch(), {"7"}
+    spec = CameraSpec(None, "Entrance", "rtsp://entrance", output_id=3, record_mode=INTERVAL, record_every_s=600,
                       record_while_present=while_present)
     worker = service.CameraWorker(spec, vision, Frames(4))
     now = [datetime(2026, 10, 24, 9, 0)]
@@ -162,9 +200,9 @@ def test_a_person_who_stays_is_photographed_again_if_the_rule_repeats(cfg, monke
     worker.analyzer = Script([arrived, still_there, still_there, still_there], now)  # 9:05, 9:10, 9:15, 9:20
     monkeypatch.setattr(worker, "_publish", lambda frame, result: None)
     worker._run()
-    assert len(vision._door.opened) == 1  # only arriving opens the door
+    assert len(vision._switch.switched) == 1  # only arriving switches the output
     with vision.db.session() as session:  # 9:05 and, while they stay, 9:15
-        assert [event.door for event in session.scalars(select(Event).order_by(Event.id))] == doors
+        assert [event.action for event in session.scalars(select(Event).order_by(Event.id))] == actions
 
 
 def test_a_camera_waiting_for_its_model_gets_it_once_downloaded(cfg, monkeypatch):
@@ -210,7 +248,7 @@ def test_a_thing_that_stayed_is_recorded_with_its_picture(cfg, monkeypatch):
     vision.on_sighting(CameraSpec(None, "Depósito", "rtsp://storage", analysis="objects"), frame, Result(), sighting)
     with vision.db.session() as session:
         event = session.scalars(select(Event)).one()
-        assert (event.kind, event.label, event.count, event.door) == ("detected", "person", 2, "")
+        assert (event.kind, event.label, event.count, event.action) == ("detected", "person", 2, "")
         assert (cfg.paths.data_dir / event.snapshot).exists()
         assert (cfg.paths.data_dir / event.snapshot.replace(".jpg", ".face.jpg")).exists()  # the record's thumbnail
 

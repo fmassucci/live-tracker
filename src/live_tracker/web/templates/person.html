@@ -18,10 +18,10 @@
         {% else %}
         <span class="state">{{ t("Ready to be recognized") }}</span>
         {% endif %}
-        {% if person.door_access %}
-        <span class="state">{{ t("Opens the door") }}</span>
+        {% if person.access %}
+        <span class="state">{{ t("Has access") }}</span>
         {% else %}
-        <span class="state state-off">{{ t("Door stays closed") }}</span>
+        <span class="state state-off">{{ t("No access") }}</span>
         {% endif %}
         {% if person.informed_at %}
         <span class="state">{{ t("Informed on {date}", date=person.informed_at.strftime("%d/%m/%Y")) }}</span>

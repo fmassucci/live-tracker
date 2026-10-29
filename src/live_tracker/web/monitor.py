@@ -20,7 +20,7 @@ from live_tracker.models import CATALOG
 from live_tracker.objects import NAMES as OBJECT_NAMES
 from live_tracker.web.cameras import ANALYSIS_NAMES
 from live_tracker.web.common import (
-    DOOR_RESULTS, KINDS, fragment, image_response, page, recording_state, require_user, services,
+    ACTIONS, KINDS, fragment, image_response, page, recording_state, require_user, services,
 )
 
 router = APIRouter(dependencies=[Depends(require_user)])
@@ -70,7 +70,7 @@ def records(
     return page(
         request, "records.html", section="records", events=events, people=people, camera_names=camera_names,
         tab_counts=tab_counts,
-        day=chosen, kind=kind, person=person, kinds=FACE_KINDS, door_results=DOOR_RESULTS, things=NAMES,
+        day=chosen, kind=kind, person=person, kinds=FACE_KINDS, actions=ACTIONS, things=NAMES,
         retention=services(request).cfg.storage.retention_days, **_days_around(chosen),
     )
 
@@ -138,7 +138,7 @@ def live(request: Request, camera_id: int | None = None) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:  # stopped cameras too, so they can be started from here
         cameras = session.scalars(
-            select(Camera).order_by(Camera.enabled.desc(), Camera.device.desc(), Camera.name)  # doors first
+            select(Camera).order_by(Camera.enabled.desc(), Camera.output_id.is_(None), Camera.name)  # as on Cameras
         ).all()
     chosen = next((c for c in cameras if c.id == camera_id), cameras[0] if cameras else None)
     status = s.vision.status()
@@ -154,7 +154,9 @@ def _today(request: Request) -> dict:
     start = datetime.combine(now.date(), datetime.min.time())
     today = Event.at >= start
     with s.db.session() as session:
-        cameras = session.scalars(select(Camera).order_by(Camera.device.desc(), Camera.name)).all()  # as on Cameras
+        cameras = session.scalars(
+            select(Camera).order_by(Camera.output_id.is_(None), Camera.name)  # as on Cameras
+        ).all()
         shown = [c for c in cameras if c.analysis or c.enabled]  # a stopped camera with a model shows it's stopped
         recognized = session.execute(
             select(

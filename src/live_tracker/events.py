@@ -38,21 +38,21 @@ class EventLog:
         face: np.ndarray | None = None,
         camera_id: int | None,
         person_name: str | None,
-        door: str,
+        action: str,
         model: str,
         liveness: str,
     ) -> int:
         person_id = int(decision.person) if decision.person and decision.person.isdigit() else None
         return self._save(decision.kind, snapshot, face, camera_id, person_id=person_id, person_name=person_name,
-                          score=decision.score, door=door, model=model, liveness=liveness)
+                          score=decision.score, action=action, model=model, liveness=liveness)
 
     def record_sighting(
         self, sighting: Sighting, snapshot: np.ndarray, *, thumbnail: np.ndarray | None, camera_id: int | None,
         model: str,
     ) -> int:
-        """A kind of thing the people-and-objects model saw stay in the picture: no person, no door."""
+        """A kind of thing the people-and-objects model saw stay in the picture: no person, no device switched."""
         return self._save("detected", snapshot, thumbnail, camera_id, label=sighting.kind, count=sighting.count,
-                          score=sighting.score, door="", model=model, liveness="none")
+                          score=sighting.score, action="", model=model, liveness="none")
 
     def _save(self, kind: str, snapshot: np.ndarray, thumbnail: np.ndarray | None, camera_id: int | None,
               person_id: int | None = None, **columns: object) -> int:
@@ -63,7 +63,7 @@ class EventLog:
             write_jpeg(self._data_dir / face_path(relative), thumbnail)
         with self._db.session() as session:
             if person_id is not None and session.get(Person, person_id) is None:
-                person_id = None  # deleted while they stood at the door
+                person_id = None  # deleted while they stood at the camera
             if camera_id is not None and session.get(Camera, camera_id) is None:
                 camera_id = None
             event = Event(at=now, kind=kind, camera_id=camera_id, person_id=person_id, snapshot=relative, **columns)

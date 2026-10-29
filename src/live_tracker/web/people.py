@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from live_tracker.db import FACES_VERSION, Camera, Event, Person, Photo, audit, bump
 from live_tracker.people import CATEGORIES
 from live_tracker.web.common import (
-    DOOR_RESULTS,
+    ACTIONS,
     KINDS,
     NOT_AN_IMAGE,
     PHOTO_PROBLEMS,
@@ -71,13 +71,13 @@ def person_create(
     category: str = Form("employee"),
     job_title: str = Form(""),
     notes: str = Form(""),
-    door_access: bool = Form(False),
+    access: bool = Form(False),
     informed: bool = Form(False),
     photos: list[UploadFile] = File(default=[]),
 ) -> HTMLResponse | RedirectResponse:
     files = uploads(photos)
     form = {"name": name, "category": category, "job_title": job_title, "notes": notes,
-            "door_access": door_access, "informed": informed}
+            "access": access, "informed": informed}
     error = _person_error(name, category) or (
         "Confirm that the person was told how their face is used before adding photos."
         if files and not informed else ""
@@ -89,7 +89,7 @@ def person_create(
     with s.db.session() as session:
         person = Person(
             name=name.strip(), category=category, job_title=job_title.strip(), notes=notes.strip(),
-            door_access=door_access, informed_at=datetime.now() if informed else None,
+            access=access, informed_at=datetime.now() if informed else None,
         )
         session.add(person)
         session.flush()
@@ -126,13 +126,15 @@ def person_detail(request: Request, person_id: int) -> HTMLResponse:
         events = session.scalars(
             select(Event).where(Event.person_id == person_id).order_by(Event.at.desc()).limit(12)
         ).all()
-        cameras = session.scalars(select(Camera).where(Camera.enabled).order_by(Camera.device.desc(), Camera.name)).all()
+        cameras = session.scalars(
+            select(Camera).where(Camera.enabled).order_by(Camera.output_id.is_(None), Camera.name)
+        ).all()
         camera_names = {c.id: c.name for c in session.scalars(select(Camera))}
     form = {"name": person.name, "category": person.category, "job_title": person.job_title, "notes": person.notes,
-            "door_access": person.door_access, "active": person.active}
+            "access": person.access, "active": person.active}
     return page(
         request, "person.html", section="people", person=person, photos=photos, events=events, form=form,
-        cameras=cameras, ready=READY_PHOTOS, sources=PHOTO_SOURCES, kinds=KINDS, door_results=DOOR_RESULTS,
+        cameras=cameras, ready=READY_PHOTOS, sources=PHOTO_SOURCES, kinds=KINDS, actions=ACTIONS,
         camera_names=camera_names,
     )
 
@@ -145,7 +147,7 @@ def person_update(
     category: str = Form("employee"),
     job_title: str = Form(""),
     notes: str = Form(""),
-    door_access: bool = Form(False),
+    access: bool = Form(False),
     active: bool = Form(False),
     informed: bool = Form(False),
 ) -> RedirectResponse:
@@ -157,7 +159,7 @@ def person_update(
         person = _get(session, person_id)
         person.name, person.category = name.strip(), category
         person.job_title, person.notes = job_title.strip(), notes.strip()
-        person.door_access, person.active = door_access, active
+        person.access, person.active = access, active
         if informed and person.informed_at is None:
             person.informed_at = datetime.now()
         bump(session, FACES_VERSION)  # names and permissions are part of what recognition loads

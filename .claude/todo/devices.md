@@ -1,6 +1,6 @@
 # Devices: register them, then link them to cameras and to each other
 
-Proposed on 2026-10-27. Steps 1, 2 and 4 were built the same day (see Steps); linking devices to cameras is next.
+Proposed on 2026-10-27. Steps 1 to 4 were built the same day (see Steps); rules between devices are next.
 The roadmap's Phase 1 (`TODO.md`) and
 the rules plan (`rules.md`) assumed only ESP32 boards running our firmware over MQTT. On 2026-10-27 the user paired a
 ready-made module instead: a NovaDigital "Módulo Mini Inteligente Wi-Fi", made by Tuya, on the JCCP network with
@@ -106,11 +106,14 @@ Built (migration 0008):
 ## Where it is in the code
 
 - `devices/`: `__init__.py` (shared types and error codes), `tuya.py`, `esp32.py`, and `manager.py`, which keeps
-  their connections in the recognition service, beside the cameras, so a door doesn't depend on the web UI.
+  their connections in the recognition service, beside the cameras, so a device doesn't depend on the web UI.
 - `web/devices.py` and its templates. The page is htmx like the others, since the React move hasn't started; it
   moves with the rest.
-- Still to do: `door.py` becomes "pulse this output" through the manager, with `[door] mode = "shadow"` as the master
-  switch, and `Camera.device` becomes the camera's first rule.
+- `switching.py`: a camera pulses its output (`Camera.output_id`) through the manager (`pulse_output`), for the
+  output's own pulse time, when it recognizes someone with access (`Person.access`), with `[devices] mode` as the
+  master switch: "shadow" only logs, "live" switches. The pulse runs on the camera's thread before the record, whose
+  `Event.action` says "switched", "failed" or "denied". When rules land, `Camera.output_id` becomes the camera's
+  first rule. Since migration 0010 nothing is a "door": no camera role, column, config section or route.
 
 ## Screens
 
@@ -119,7 +122,8 @@ Built (migration 0008):
   wait at the top to be named, and "Add Tuya devices" opens the import. The states refresh every 3 seconds.
 - **A device's page** (built: name, fixed address, outputs' names, kinds and pulse times, inputs' names, removal).
   Still to add: what links it to cameras and other devices, and its recent commands.
-- **A camera's Actions section:** the outputs it drives. To do.
+- **A camera's Attached device** (built): the output it switches, listed by device with its pulse time; the camera
+  list shows it. One output per camera; more, and other kinds of actions, come with rules.
 
 ## Steps
 
@@ -127,8 +131,8 @@ Built (migration 0008):
   time is still to check.
 - [x] 2. **Tuya in the app:** tables, the drivers and the manager in the recognition service, and the Devices page
   with the import and Test buttons. Tried end to end on the MS-107 from this PC.
-- [ ] 3. **The door uses an output:** the camera's Actions section picks it; still logged only until the master
-  switch goes live.
+- [x] 3. **A camera switches an output:** the camera's *Attached device* picks it; logged only until
+  `[devices] mode` is "live". A record says "failed" when the output didn't switch.
 - [x] 4. **ESP32 boards** on the same interface: MQTT with paho-mqtt, announcements, states, inputs, commands that
   wait for the board's `ack`. Tested with a stand-in broker only: no board or Mosquitto yet.
 - [ ] 5. **Rules between devices,** once rules.md lands.
@@ -136,8 +140,8 @@ Built (migration 0008):
 ## Decisions to make
 
 1. **Tuya keys:** imported from the developer account inside the app. Built that way; there is no form to type a key.
-2. **Linking before rules exist:** a camera's Actions section that writes the first rule (recommended), or wait for
-   the rules editor.
+2. **Linking before rules exist:** decided on 2026-10-27: a column on the camera (`output_id`), turned into its first
+   rule when the rules editor lands.
 3. **Which network devices live on:** the Live Tracker server's own (JCCP now; recommended, so they're found by
    themselves), or a separate one for devices and cameras, as the roadmap suggests, with fixed addresses.
 

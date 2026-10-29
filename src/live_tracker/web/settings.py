@@ -1,4 +1,4 @@
-"""Settings: the name and logo shown in the app, accounts, the app's addresses and the door screen's, and
+"""Settings: the name and logo shown in the app, accounts, the app's addresses and the recognition screen's, and
 stopping the system.
 
 The Database panel's actions are in data.py.
@@ -39,15 +39,15 @@ def settings_page(request: Request) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:
         display_name = get_setting(session, "display_name") or ""
-        door_key = get_setting(session, "door_screen_key")
-        door_cameras = session.scalars(select(Camera).where(Camera.device == "door").order_by(Camera.name)).all()
+        screen_key = get_setting(session, "screen_key")
+        screen_cameras = session.scalars(select(Camera).where(Camera.analysis == "faces").order_by(Camera.name)).all()
         me = request.session["user"]
         users = session.scalars(select(User).order_by(User.username != me, User.username)).all()  # yours first
         admin_signed_in = is_admin(session, me)
     here, others = web_addresses(s.cfg)
-    door_base_url = others[0] if others else str(request.base_url).rstrip("/")  # the address the tablet opens
-    return page(request, "settings.html", section="settings", display_name=display_name, door_key=door_key,
-                door_cameras=door_cameras, users=users, cfg=s.cfg, door_base_url=door_base_url,
+    screen_base_url = others[0] if others else str(request.base_url).rstrip("/")  # the address the tablet opens
+    return page(request, "settings.html", section="settings", display_name=display_name, screen_key=screen_key,
+                screen_cameras=screen_cameras, users=users, cfg=s.cfg, screen_base_url=screen_base_url,
                 here_address=here, network_addresses=others, is_admin=admin_signed_in,
                 data_folder=s.cfg.paths.data_dir.resolve(), on_this_computer=on_this_computer(request),
                 summary=summary(request) if admin_signed_in else None, dated=False)
@@ -95,13 +95,13 @@ def remove_logo(request: Request) -> RedirectResponse:
     return RedirectResponse("/settings#identity", status_code=303)
 
 
-@admin.post("/settings/door-screen/new-key")
-def new_door_key(request: Request) -> RedirectResponse:
+@admin.post("/settings/screen/new-key")
+def new_screen_key(request: Request) -> RedirectResponse:
     with services(request).db.session() as session:
-        set_setting(session, "door_screen_key", secrets.token_urlsafe(12))
-        audit(session, request.session["user"], "door screen address changed")
-    flash(request, "New door screen address created. Open it again on the tablet; the old one no longer works.")
-    return RedirectResponse("/settings#door-screen", status_code=303)
+        set_setting(session, "screen_key", secrets.token_urlsafe(12))
+        audit(session, request.session["user"], "recognition screen address changed")
+    flash(request, "New recognition screen address created. Open it again on the tablet; the old one no longer works.")
+    return RedirectResponse("/settings#screen", status_code=303)
 
 
 @admin.post("/settings/stop", response_model=None)
@@ -236,7 +236,7 @@ def _other_account(session: Session, user_id: int, signed_in: str) -> User:
 
 @router.get("/branding/logo.png")
 def logo(request: Request) -> FileResponse:
-    """Public: the sign-in page and the door screen show it too."""
+    """Public: the sign-in page and the recognition screen show it too."""
     path = services(request).cfg.paths.data_dir / "branding" / "logo.png"
     if not path.is_file():
         raise HTTPException(404)

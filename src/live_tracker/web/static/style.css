@@ -1,6 +1,6 @@
 /* Live Tracker. Quiet surfaces; faces and the live camera carry the screen.
    Orange marks the brand and actions. Green and red only mean recognized and not recognized.
-   The one moving thing: the live frame lights up when the door decides. */
+   The one moving thing: the live frame lights up when the camera decides. */
 
 @font-face {
   font-family: "Instrument Sans";
@@ -432,7 +432,7 @@ form:not(:has(input[name="analysis"][value="faces"]:checked)) .only-faces { disp
 .avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
 .avatar-empty { display: grid; place-items: center; font-weight: 650; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
 
-/* Live video frame. It lights up when the door decides: green for recognized, red for not. */
+/* Live video frame. It lights up when the camera decides: green for recognized, red for not. */
 .video {
   --ratio: 1.7778; /* the camera's own shape, set on the element from its image size */
   position: relative; overflow: hidden; aspect-ratio: var(--ratio);
@@ -884,7 +884,7 @@ a.entry-name:hover { color: var(--orange-ink); }
   .login-box { padding: 22px 20px; border-radius: 20px; }
 }
 
-/* Door screen: always dark, readable from a couple of meters */
+/* Recognition screen: always dark, readable from a couple of meters */
 .kiosk {
   min-height: 100vh; display: grid; grid-template-rows: auto 1fr; color-scheme: dark;
   background: #0b0c0e; color: #f3f4f6;

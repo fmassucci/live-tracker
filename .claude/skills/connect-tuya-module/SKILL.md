@@ -73,6 +73,17 @@ and never print it or the local key.
 - To try a module from a computer behind another router: run `live-tracker run` and `web` with a scratch config
   (other ports, a scratch `data_dir`), and give the module its fixed address.
 
+## 5. Link it to a camera
+
+- **Câmeras**, the camera, **Dispositivo ligado**, **Saída**: the channel it switches when it recognizes someone with
+  access (only with face recognition). It stays on for that output's time on the device's **Editar** page; the
+  camera list shows "Aciona <device>, <channel>".
+- Nothing switches until `[devices] mode = "live"` in `config.toml` (then Stop the system and start it again);
+  "shadow" only logs "would switch output". In live mode the log says `<device> switched for <person>`, and the
+  record says "dispositivo acionado", or "dispositivo não acionou" when the module didn't confirm.
+- Only people with access switch it (**Tem acesso**, in People); anyone else's record says "sem acesso, nada
+  acionado".
+
 ## The MS-107's quirk: don't merge its two commands
 
 The module clears a channel's countdown whenever that channel's switch changes, even when both come in one command:

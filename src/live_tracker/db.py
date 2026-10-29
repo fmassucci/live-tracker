@@ -49,8 +49,9 @@ class Camera(Base):
     url: Mapped[str] = mapped_column(String(500))  # RTSP URL (with password), video file, or webcam index
     # What runs on the camera's picture, and what the camera drives. Every camera records with its analysis.
     analysis: Mapped[str] = mapped_column(String(20), default="faces", server_default="faces")  # face recognition
-    # "door": recognizing someone with access opens it, and counts as an entry on Today. "": nothing attached.
-    device: Mapped[str] = mapped_column(String(10), default="", server_default="")
+    # The device output it switches when it recognizes someone with access, such as a Tuya module's channel, for
+    # that output's pulse time. None: it switches nothing.
+    output_id: Mapped[int | None] = mapped_column(ForeignKey("device_outputs.id", ondelete="SET NULL"))
     # "": the whole picture. "top" or "bottom": one lens of a two-lens camera that sends both in one picture.
     part: Mapped[str] = mapped_column(String(10), default="", server_default="")
     # The analysis's own settings, as JSON: for "objects", the kinds of things to record (objects.ObjectSettings).
@@ -66,7 +67,7 @@ class Camera(Base):
 
 
 class Person(Base):
-    """Everyone the system can recognize. The base registry that every module (door, presence, ...) builds on."""
+    """Everyone the system can recognize. The base registry that every module (devices, presence, ...) builds on."""
 
     __tablename__ = "people"
 
@@ -76,7 +77,7 @@ class Person(Base):
     job_title: Mapped[str] = mapped_column(String(80), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)  # recognized at all
-    door_access: Mapped[bool] = mapped_column(Boolean, default=True)  # the door may open for them
+    access: Mapped[bool] = mapped_column(Boolean, default=True)  # recognizing them switches the camera's device
     informed_at: Mapped[datetime | None] = mapped_column(DateTime)  # told about face recognition (LGPD)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -127,8 +128,9 @@ class Event(Base):
     person_name: Mapped[str | None] = mapped_column(String(120))  # kept even if the person is deleted
     score: Mapped[float] = mapped_column(Float)
     snapshot: Mapped[str | None] = mapped_column(String(300))  # relative to the data folder
-    # "shadow" (logged only), "opened", "kept"; "" away from the door, or for another photo of someone still there
-    door: Mapped[str] = mapped_column(String(10))
+    # What the camera's device did: "switched", "failed" (it didn't switch), "denied" (not someone with access),
+    # "shadow" (test mode: only logged); "" at a camera without a device, or for another photo of someone still there
+    action: Mapped[str] = mapped_column(String(10))
     model: Mapped[str] = mapped_column(String(20))
     liveness: Mapped[str] = mapped_column(String(20))
 
@@ -157,7 +159,7 @@ class AuditEntry(Base):
 
 
 class Device(Base):
-    """A board or module that switches things (door locks, lights, sirens) and reports buttons and contacts.
+    """A board or module: active, with outputs that switch things (relays), and passive, with inputs (sensors).
 
     "esp32": a board with our firmware, over MQTT (firmware/README.md); it announces itself. "tuya": a ready-made
     Wi-Fi module made by Tuya (NovaDigital and others), on the local network with its local key; imported from the
@@ -203,7 +205,7 @@ class DeviceOutput(Base):
 
 
 class DeviceInput(Base):
-    """A button or a door contact on a board."""
+    """A button or a sensor on a board."""
 
     __tablename__ = "device_inputs"
     __table_args__ = (UniqueConstraint("device_id", "key"),)

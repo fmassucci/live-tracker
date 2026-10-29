@@ -45,10 +45,10 @@
     <div>
       {% if not p.active %}
       <span class="state state-off">{{ t("Recognition off") }}</span>
-      {% elif p.door_access %}
-      <span class="state">{{ t("Opens the door") }}</span>
+      {% elif p.access %}
+      <span class="state">{{ t("Has access") }}</span>
       {% else %}
-      <span class="state state-off">{{ t("Door stays closed") }}</span>
+      <span class="state state-off">{{ t("No access") }}</span>
       {% endif %}
     </div>
     <div class="small muted">
@@ -63,7 +63,7 @@
 </ul>
 {% elif total == 0 %}
 <div class="empty">
-  <p>{{ t("Nobody is registered yet. Add the first person with a few face photos, and the door camera starts recognizing them.") }}</p>
+  <p>{{ t("Nobody is registered yet. Add the first person with a few face photos, and the cameras start recognizing them.") }}</p>
   <a class="button" href="/people/new">{{ icon("plus") }}{{ t("Add a person") }}</a>
 </div>
 {% else %}

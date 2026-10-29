@@ -24,19 +24,21 @@ min_margin = 0.08        # best person must beat the runner-up by this much
 
 [liveness]
 # Once the liveness model is downloaded (Settings, AI models), a face must look at least this likely to be real
-# (0 to 1) to count as a person rather than a photo or a screen. Real faces at the door score about 0.98.
+# (0 to 1) to count as a person rather than a photo or a screen. Real faces at the camera score about 0.98.
 threshold = 0.5
 
 [decision]
 window_s = 1.5           # agreeing frames must fall within this window
 min_votes = 3
-rearm_after_s = 1.0      # the door must be clear this long before the same person is decided again
+rearm_after_s = 1.0      # the camera must see no face this long before the same person is decided again
 person_cooldown_s = 5.0
 unknown_cooldown_s = 10.0
 unknown_after_s = 2.0    # a face must stay unmatched this long to be recorded as not recognized
 
-[door]
-# Only "shadow" exists for now: decisions are recorded and nothing is opened.
+[devices]
+# "shadow": decisions are recorded and nothing is switched, to check the thresholds on real people first.
+# "live": recognizing someone with access switches on the device output linked to the camera (Cameras), for that
+# output's time; the device switches it off by itself.
 mode = "shadow"
 
 [mqtt]
@@ -55,7 +57,7 @@ port = 8080
 [web]
 host = "0.0.0.0"         # other devices on the network can open it; "127.0.0.1" for this computer only
 port = 8000
-language = "pt"          # "pt" or "en": default for new sessions, the door screen and video labels
+language = "pt"          # "pt" or "en": default for new sessions, the recognition screen and video labels
 
 [storage]
 retention_days = 90      # records and their pictures older than this are deleted

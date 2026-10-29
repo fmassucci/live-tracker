@@ -33,7 +33,7 @@
       <div class="camera-meta">
         <span>{{ t(analyses.get(c.analysis, c.analysis)) }}</span>
         {% if c.analysis %}<span>{{ rules[c.id] }}</span>{% endif %}
-        {% if c.device == "door" %}<span>{{ t("Opens the door") }}</span>{% endif %}
+        {% if c.output_id in outputs %}<span>{{ t("Switches {output}", output=outputs[c.output_id]) }}</span>{% endif %}
         {% if state in ("recording", "live", "no-model") %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
       </div>
       {% if state == "no-image" %}
@@ -52,7 +52,7 @@
 </ul>
 {% else %}
 <div class="empty">
-  <p>{{ t("No cameras yet. Add the door camera with its video address (RTSP); you can test it before saving.") }}</p>
+  <p>{{ t("No cameras yet. Add a camera with its video address (RTSP); you can test it before saving.") }}</p>
   <a class="button" href="/cameras/new">{{ icon("plus") }}{{ t("Add a camera") }}</a>
 </div>
 {% endif %}

@@ -14,8 +14,8 @@
       {% else %}{{ t("Unknown person") }}{% endif %}
     </p>
     <p class="muted small">
-      {% if e.kind == "recognized" and e.door and where %}{{ where }}: {{ t(door_results[e.door]) }}
-      {% elif e.kind == "recognized" and e.door %}{{ t(door_results[e.door]) | capitalize }}
+      {% if e.kind == "recognized" and e.action in actions and where %}{{ where }}: {{ t(actions[e.action]) }}
+      {% elif e.kind == "recognized" and e.action in actions %}{{ t(actions[e.action]) | capitalize }}
       {% else %}{{ where }}{% endif %}
     </p>
   </div>

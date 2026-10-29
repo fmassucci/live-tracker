@@ -8,7 +8,8 @@ from sqlalchemy import select
 from live_tracker.config import MqttConfig
 from live_tracker.db import Device, DeviceCommand, DeviceOutput
 from live_tracker.devices import (
-    BAD_KEY, BROKER, NO_ANSWER, NO_TIMER, NOT_FOUND, OFFLINE, REFUSED, DeviceError, DeviceSpec, OutputSpec, tuya,
+    BAD_KEY, BROKER, NO_ANSWER, NO_OUTPUT, NO_TIMER, NOT_FOUND, OFFLINE, REFUSED, DeviceError, DeviceSpec, OutputSpec,
+    tuya,
 )
 from live_tracker.devices.esp32 import Esp32Boards
 from live_tracker.devices.manager import DeviceManager, record_board
@@ -44,12 +45,14 @@ COUNTDOWNS = {"1": "9", "2": "10"}  # each switch's countdown, as on the MS-107
 
 class FakeTuyaDevice:
     """A module on the network: answers on some protocol versions, and keeps its data points as the NovaDigital
-    MS-107 does: changing a switch clears its countdown, even within one command."""
+    MS-107 does: changing a switch clears its countdown, even within one command. What it says unasked waits on the
+    connection, and comes before the answer to whatever is asked next, as with tinytuya."""
 
     def __init__(self, answers_on: set[float], dps: dict, refuses_key: bool = False,
                  ignores: tuple[str, ...] = ()) -> None:
         self.answers_on, self.dps, self.refuses_key, self.ignores = answers_on, dps, refuses_key, ignores
         self.sent: list[tuple[str, object]] = []
+        self.unread: list[dict] = []
         self.version = None
 
     def __call__(self, uid, address, local_key, version):  # stands in for tinytuya.Device(...)
@@ -70,7 +73,7 @@ class FakeTuyaDevice:
             return {"Error": "Check device key or version", "Err": "914"}
         if self.version not in self.answers_on:
             return {"Error": "Unexpected Payload from Device", "Err": "904"}
-        return {"dps": dict(self.dps)}
+        return self._answer({"dps": dict(self.dps)})
 
     def set_value(self, dp, value):
         self.sent.append((dp, value))
@@ -84,13 +87,23 @@ class FakeTuyaDevice:
         for dp in changed:
             if dp in COUNTDOWNS:
                 self.dps[COUNTDOWNS[dp]] = 0
-        return {"dps": changed}
+        return self._answer({"dps": changed})
+
+    def _answer(self, reply):
+        if not self.unread:
+            return reply
+        self.unread.append(reply)
+        return self.unread.pop(0)
+
+    def receive(self):
+        return self.unread.pop(0) if self.unread else None
 
     def run_countdowns(self):
-        """The countdowns run out: their switches go off."""
+        """The countdowns run out: their switches go off, and the module says so."""
         for switch, countdown in COUNTDOWNS.items():
             if self.dps.get(countdown):
                 self.dps[switch], self.dps[countdown] = False, 0
+                self.unread.append({"protocol": 4, "dps": {switch: False, countdown: 0}})
 
     def close(self):
         pass
@@ -134,6 +147,36 @@ def test_a_countdown_the_module_doesnt_confirm_switches_the_output_off_again():
         module.pulse("1", 3000)
     assert error.value.code == NO_ANSWER
     assert device.sent == [("1", True), ("9", 3), ("1", False)] and device.dps["1"] is False
+
+
+TWO_TIMERS = replace(SPEC, outputs=(OutputSpec("1", "lock", 1000, 3_600_000, 9),
+                                    OutputSpec("2", "relay", 1000, 3_600_000, 10)))
+
+
+@pytest.mark.parametrize("read_before_asking", [True, False])
+def test_what_the_module_says_unasked_is_never_taken_for_an_answer(monkeypatch, read_before_asking):
+    """On 2026-10-27 a countdown's end was taken for the answer to the next pulse, which then failed, and the
+    module was dropped as gone. Said before the next pulse, it's read first; said as it's asked, it's read past."""
+    if read_before_asking:
+        monkeypatch.setattr(tuya, "_unread", lambda device, timeout: bool(device.unread))
+    device = FakeTuyaDevice({3.4}, {"1": False, "9": 0, "2": False, "10": 0})
+    module = _opened(device, TWO_TIMERS)
+    module.pulse("1", 1000)
+    device.run_countdowns()
+    module.pulse("2", 1000)
+    assert device.sent == [("1", True), ("9", 1), ("2", True), ("10", 1)] and not device.unread
+    status = module.status()
+    assert status["online"] and status["outputs"] == {"1": False, "2": True}
+
+
+def test_a_relay_switched_by_the_module_shows_at_once_not_at_the_next_poll(monkeypatch):
+    monkeypatch.setattr(tuya, "_unread", lambda device, timeout: bool(device.unread))
+    device = FakeTuyaDevice({3.4}, {"1": False, "9": 0, "2": False, "10": 0})
+    module = _opened(device, TWO_TIMERS)
+    module.pulse("1", 1000)
+    device.run_countdowns()
+    module._listen(0.05)
+    assert module.status()["outputs"]["1"] is False and not device.unread
 
 
 def test_the_watchdog_switches_off_a_pulse_that_outlasts_its_time_and_nothing_else():
@@ -347,6 +390,21 @@ def test_the_manager_connects_the_modules_in_the_database_and_lets_go_of_removed
     with db.session() as session:
         manager.load(session)
     assert module.stopped and not manager._modules
+
+
+def test_a_camera_pulses_its_output_for_the_outputs_own_time(cfg, db):
+    device_id = _tuya_device(db)
+    with db.session() as session:
+        output = session.scalar(select(DeviceOutput))
+        output.pulse_ms, output_id = 5000, output.id
+    manager = _manager(cfg, db)
+    with db.session() as session:
+        manager.load(session)
+    assert manager.pulse_output(output_id) == "Porta"
+    assert manager._modules[device_id].pulses == [("1", 5000)]
+    with pytest.raises(DeviceError) as error:
+        manager.pulse_output(output_id + 1)  # removed meanwhile
+    assert error.value.code == NO_OUTPUT
 
 
 def test_commands_from_the_web_ui_are_carried_out_and_late_ones_dropped(cfg, db):

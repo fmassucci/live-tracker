@@ -1,10 +1,11 @@
 # Live Tracker
 
-Face recognition at the staff entrance, with a web UI in Portuguese and English.
+Face recognition on IP cameras that switch devices (relays) for the people with access, with a web UI in
+Portuguese and English.
 
-**MVP stage:** the door is not controlled yet. Decisions are only recorded ("shadow mode"): devices (ESP32 boards and
-Tuya Wi-Fi modules) can be added and tested on the Devices page, but no camera drives them yet. Download the liveness check (Settings, AI models): without it, a photo of an employee held up to the
-camera would be accepted.
+**MVP stage:** a camera switches its device only with `[devices] mode = "live"` in `config.toml`. By default
+decisions are only recorded ("shadow mode"), to check the thresholds on real people first. Download the liveness
+check (Settings, AI models): without it, a photo of an employee held up to the camera would be accepted.
 
 ## How it fits together
 
@@ -16,13 +17,13 @@ IP camera ──RTSP──► recognition service ──── local port (video
                                          data/photos, data/snapshots
 ```
 
-- **Recognition service** (`run`): reads every enabled camera from the database. Door cameras recognize people,
-  record each decision with a snapshot and, later, open the door. It also keeps the connections to the devices
-  and carries out their commands. It keeps working when the web UI is stopped.
+- **Recognition service** (`run`): reads every enabled camera from the database. Face cameras recognize people,
+  record each decision with a snapshot and switch the device output linked to the camera. It also keeps the
+  connections to the devices and carries out their commands. It keeps working when the web UI is stopped.
 - **Web UI** (`web`): Today (who came in), People, Records, Cameras, Devices, Live view, Settings, plus the
-  full-screen door screen for a tablet at the entrance. Changes to people, cameras or devices reach the service
+  full-screen recognition screen for a tablet beside a camera. Changes to people, cameras or devices reach the service
   within a second.
-- **People** is the base registry every module builds on: the door today, others later.
+- **People** is the base registry every module builds on: devices today, others later.
 
 ## Install
 
@@ -115,12 +116,14 @@ Phones, tablets and other computers on the same network open it at the address s
 and printed by `web` when it starts, such as http://192.168.0.10:8000. The first time, Windows Firewall asks
 whether Python may use the network: allow it on private or public networks, whichever Windows has set for the
 Wi-Fi. Anyone on the network can reach the sign-in page, so change the `admin` password first. To allow only
-this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with its secret key) is there too.
+this computer, set `[web] host = "127.0.0.1"`. The recognition screen's address (with its secret key) is there too.
 
 ### First steps in the UI
 
-1. **Cameras:** add each camera with its video address. Every camera recognizes people and records; set
-   *Attached device* to *Door* on the camera at the door, which opens it and counts the entries on Today.
+1. **Cameras:** add each camera with its video address. Every camera with face recognition recognizes people and
+   records; its *Attached device* can name a device output, such as a Tuya module's channel (step 4).
+   Recognizing someone with access switches that output on for its time on the Devices page; the record says
+   whether it switched.
    *Test connection* checks the address before saving, and
    *Find cameras on this network* lists ONVIF cameras and their addresses. Jortan cameras use the Yoosee
    app: turn on *NVR connection* in the camera's settings there and create a password. The address is then
@@ -128,10 +131,11 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
    not list it. A dual-lens Jortan sends both lenses in one picture, one above the other: *Split into two
    cameras*, on the camera's edit page, makes one camera for each lens.
 2. **People:** add each person with 3 to 5 face photos. Each photo is checked as soon as it is chosen. Photos
-   taken by the door camera itself (*Take photos with a camera*) match best. Photos require confirming that the
+   taken by the camera that recognizes them (*Take photos with a camera*) match best. Photos require confirming that the
    person was told how their face is used (LGPD).
 3. **Today:** entries appear on the time card as the camera recognizes people.
-4. **Devices** (administrators): the boards and modules that open doors and switch lights and sirens. *Test* on an
+4. **Devices** (administrators): the boards and modules whose outputs switch things, such as locks, lights and
+   sirens. *Test* on an
    output switches it on for a second; the device switches it off by itself, and every test goes to the audit log.
    - **Tuya Wi-Fi modules** (NovaDigital and other brands): pair the module in the Smart Life app, then on
      https://iot.tuya.com create a cloud project (data center *Western America* for accounts made in Brazil), and
@@ -145,7 +149,7 @@ this computer, set `[web] host = "127.0.0.1"`. The door screen's address (with i
    - **ESP32 boards** with the Live Tracker firmware connect through an MQTT broker (`firmware/README.md`):
      set `[mqtt]` in `config.toml`, and boards appear on the page by themselves, to be named.
 5. **Settings:** name and logo shown in the app and accounts. *System* has the addresses for this computer,
-   phones and tablets, and the door screen's address. *Database*, for administrators, has where the images
+   phones and tablets, and the recognition screen's address. *Database*, for administrators, has where the images
    are stored, and downloads or deletes records with their pictures.
 
 ## Command line
@@ -204,6 +208,5 @@ python -m pytest
 
 ## Not built yet
 
-- A camera opening a door through a device output (the Devices page and the outputs' tests work)
 - Alerts by e-mail or WhatsApp, for fire, smoke and falls among others
 - Liveness with depth or infrared, when a camera has it (the current check uses the regular picture)

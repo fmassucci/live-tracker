@@ -88,7 +88,7 @@ def test_a_restart_remembers_the_photos_the_rule_counts(db):
             (datetime(2026, 10, 24, 9, 20), "unknown", "", None),
         ]:
             session.add(Event(at=at, kind=kind, label=label, person_id=person_id, camera_id=1, score=0.8,
-                              snapshot="x.jpg", door="", model="yolox", liveness="none"))
+                              snapshot="x.jpg", action="", model="yolox", liveness="none"))
     now = datetime(2026, 10, 24, 10, 0)
     rule = RecordRule(DAILY)
     last = last_recorded(db, 1, rule.remembered_since(now))

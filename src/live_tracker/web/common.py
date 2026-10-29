@@ -22,7 +22,7 @@ from live_tracker.people import People
 from live_tracker.users import is_admin, user_exists
 from live_tracker.web.vision_client import VisionClient
 
-ASSET_VERSION = "40"  # bump to make browsers reload the stylesheet, scripts and icons
+ASSET_VERSION = "42"  # bump to make browsers reload the stylesheet, scripts and icons
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -39,7 +39,9 @@ PHOTO_PROBLEMS = {
 CATEGORIES = {"employee": "Employee", "contractor": "Contractor", "visitor": "Visitor"}
 KINDS = {"recognized": "Recognized", "unknown": "Not recognized", "spoof": "Photo or screen suspected",
          "detected": "Detected"}  # "detected": a kind of thing the people-and-objects model saw
-DOOR_RESULTS = {"opened": "door opened", "shadow": "test mode, door stayed closed", "kept": "door stayed closed"}
+# What the camera's device did at a recognition (Event.action).
+ACTIONS = {"switched": "device switched", "shadow": "test mode, nothing switched", "failed": "device didn't switch",
+           "denied": "no access, nothing switched"}
 
 # What a camera is doing, as its chip says it. A camera with an AI model records a photo of what it finds,
 # never video; one without a model only shows its picture.
@@ -145,7 +147,7 @@ def _render(request: Request, template: str, section: str, status_code: int, fla
             "brand": branding(s),
             "section": section,
             "flashes": flashes,
-            "door_mode": s.cfg.door.mode,
+            "devices_mode": s.cfg.devices.mode,
             "default_password": request.session.get("default_password", False),
             "hidden_notices": request.session.get("hidden_notices", []),
             "categories": CATEGORIES,

@@ -51,8 +51,8 @@
   {% if default_password and "default-password" not in hidden_notices %}
   {% call toast("bad", "shield", t("Close"), hide_url="/notices/default-password/hide") %}{{ t("You signed in with the default password, admin. Anyone who knows it can see the faces stored here.") }} <a href="/settings#accounts">{{ t("Change it now") }}</a>{% endcall %}
   {% endif %}
-  {% if door_mode == "shadow" and "test-mode" not in hidden_notices %}
-  {% call toast("warn", "info", t("Close"), hide_url="/notices/test-mode/hide") %}{{ t("Test mode: the door does not open. Decisions are only recorded.") }}{% endcall %}
+  {% if devices_mode == "shadow" and "test-mode" not in hidden_notices %}
+  {% call toast("warn", "info", t("Close"), hide_url="/notices/test-mode/hide") %}{{ t("Test mode: no device is switched. Decisions are only recorded.") }}{% endcall %}
   {% endif %}
   {% block toasts %}{% endblock %}
   {% for message in flashes %}

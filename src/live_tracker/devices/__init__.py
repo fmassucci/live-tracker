@@ -1,4 +1,4 @@
-"""Devices: the boards and modules that open doors and switch lights and sirens, behind one interface.
+"""Devices: the boards and modules that switch things (relays) and report sensors, behind one interface.
 
 - esp32.py: boards with our firmware, over MQTT (firmware/README.md). They announce themselves.
 - tuya.py: ready-made Wi-Fi modules made by Tuya (NovaDigital and others), on the local network with their local
@@ -42,6 +42,7 @@ class OutputSpec:
     pulse_ms: int = 3000
     max_ms: int = 10000
     timer_dp: int | None = None  # Tuya: the countdown that switches it off on the module
+    id: int | None = None  # in the database (DeviceOutput.id), which a camera linked to it names it by
 
 
 @dataclass(frozen=True)

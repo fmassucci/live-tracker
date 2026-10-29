@@ -10,10 +10,11 @@ import cv2
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from live_tracker import onvif
 from live_tracker.camera import crop, probe, redact
-from live_tracker.db import CAMERAS_VERSION, Camera, audit, bump
+from live_tracker.db import CAMERAS_VERSION, Camera, Device, audit, bump
 from live_tracker.falls import FallSettings
 from live_tracker.fire import NAMES as FIRE_NAMES
 from live_tracker.fire import FireSettings
@@ -35,7 +36,6 @@ ANALYSIS_HINTS = {"": "Only shows the live picture.", "faces": "Recognizes the p
                   "falls": "Records someone who stays lying on the floor."}
 # The groups of kinds below the common ones, without them.
 OTHER_GROUPS = tuple((group, tuple(k for k in keys if k not in COMMON)) for group, keys in GROUPS)
-DEVICES = {"": "None", "door": "Door"}  # see Camera.device
 # When a photo is kept (see Camera.record_mode), with a line under each choice; the interval's line depends on
 # the model, so it is in the template.
 RECORD_MODES = {APPEAR: "Each time it appears", INTERVAL: "At an interval", DAILY: "First time of the day"}
@@ -65,19 +65,22 @@ def _sent_settings(
 def camera_list(request: Request) -> HTMLResponse:
     s = services(request)
     with s.db.session() as session:
-        cameras = session.scalars(select(Camera).order_by(Camera.device.desc(), Camera.name)).all()  # doors first
+        # the cameras that switch a device first
+        cameras = session.scalars(select(Camera).order_by(Camera.output_id.is_(None), Camera.name)).all()
     status = s.vision.status()
     statuses = status.get("cameras", {}) if status else {}
     states = {c.id: recording_state(c, statuses.get(str(c.id)), status is not None) for c in cameras}
     t = translator(request)
+    outputs = {o["id"]: f"{d['name']}, {o['name']}" for d in _device_outputs(request) for o in d["outputs"]}
     return page(request, "cameras.html", section="cameras", cameras=cameras, statuses=statuses, states=states,
-                service_up=status is not None, analyses=ANALYSIS_NAMES, rules={c.id: _rule(t, c) for c in cameras})
+                service_up=status is not None, analyses=ANALYSIS_NAMES, rules={c.id: _rule(t, c) for c in cameras},
+                outputs=outputs)
 
 
 @router.get("/cameras/new", response_class=HTMLResponse)
 def camera_new(request: Request) -> HTMLResponse:
     analyses = _analyses(request)
-    form = {"analysis": "faces" if "faces" in analyses else "", "device": "", "record_mode": APPEAR,
+    form = {"analysis": "faces" if "faces" in analyses else "", "record_mode": APPEAR,
             "record_while_present": True, **_every_fields(DEFAULT_EVERY_S)}
     return page(request, "camera_form.html", section="cameras", camera=None, form=form, objects=ObjectSettings(),
                 **_other_settings(), error="", **_choices(request, analyses))
@@ -85,27 +88,29 @@ def camera_new(request: Request) -> HTMLResponse:
 
 @router.post("/cameras/new", response_model=None)
 def camera_create(
-    request: Request, name: str = Form(""), url: str = Form(""), analysis: str = Form(""), device: str = Form(""),
-    kinds: list[str] = Form([]), confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
-    objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
-    every_unit: str = Form("min"), record_while_present: bool = Form(False),
-    others: dict[str, ObjectSettings] = Depends(_sent_settings),
+    request: Request, name: str = Form(""), url: str = Form(""), analysis: str = Form(""), output_id: str = Form(""),
+    kinds: list[str] = Form([]), confidence: float = Form(0.5),
+    min_seconds: float = Form(2.0), fps: float = Form(4.0), objects_model: str = Form(""),
+    record_mode: str = Form(APPEAR), every_value: str = Form(""), every_unit: str = Form("min"),
+    record_while_present: bool = Form(False), others: dict[str, ObjectSettings] = Depends(_sent_settings),
 ) -> HTMLResponse | RedirectResponse:
     analyses = _analyses(request)
     objects = ObjectSettings.of({"kinds": kinds, "confidence": confidence, "min_seconds": min_seconds, "fps": fps,
                                  "model": objects_model})
     every_s = _every_s(every_value, every_unit)
-    error = (_camera_error(name, url, analysis in analyses, device) or _objects_error(analysis, kinds)
+    output, output_error = _device_output(request, analysis, output_id)
+    error = (_camera_error(name, url, analysis in analyses) or output_error or _objects_error(analysis, kinds)
              or _fire_error(analysis, others) or _record_error(record_mode, every_s))
     if error:
-        form = {"name": name, "url": url, "analysis": analysis, "device": device, "record_mode": record_mode,
-                "every_value": every_value, "every_unit": every_unit, "record_while_present": record_while_present}
+        form = {"name": name, "url": url, "analysis": analysis, "output_id": output,
+                "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
+                "record_while_present": record_while_present}
         return page(request, "camera_form.html", section="cameras", camera=None, form=form,
                     objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                     **_choices(request, analyses))
     settings = objects if analysis == "objects" else others.get(analysis)
     with services(request).db.session() as session:
-        camera = Camera(name=name.strip(), url=url.strip(), analysis=analysis, device=device,
+        camera = Camera(name=name.strip(), url=url.strip(), analysis=analysis, output_id=output,
                         model_settings=settings.dumps() if settings else "{}",
                         record_mode=record_mode, record_every_s=every_s or DEFAULT_EVERY_S,
                         record_while_present=record_while_present, enabled=True)  # starts recording right away
@@ -120,9 +125,9 @@ def camera_create(
 def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
-    form = {"name": camera.name, "url": redact(camera.url), "analysis": camera.analysis, "device": camera.device,
-            "part": camera.part, "record_mode": camera.record_mode, "record_while_present": camera.record_while_present,
-            **_every_fields(camera.record_every_s)}
+    form = {"name": camera.name, "url": redact(camera.url), "analysis": camera.analysis,
+            "output_id": camera.output_id, "part": camera.part, "record_mode": camera.record_mode,
+            "record_while_present": camera.record_while_present, **_every_fields(camera.record_every_s)}
     return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                 objects=ObjectSettings.parse(camera.model_settings), **_other_settings(camera), error="",
                 **_live(request, camera), **_choices(request, _analyses(request, camera.analysis)))
@@ -131,7 +136,7 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
     request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), analysis: str = Form(""),
-    device: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
+    output_id: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
     confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
     objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
     every_unit: str = Form("min"), record_while_present: bool = Form(False),
@@ -140,22 +145,24 @@ def camera_update(
     objects = ObjectSettings.of({"kinds": kinds, "confidence": confidence, "min_seconds": min_seconds, "fps": fps,
                                  "model": objects_model})
     every_s = _every_s(every_value, every_unit)
+    output, output_error = _device_output(request, analysis, output_id)
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
         url = _keep_password(camera, url)
         part = camera.part if part not in PARTS else part  # the choice is only shown for a camera already split
         analyses = _analyses(request, camera.analysis)
-        error = (_camera_error(name, url, analysis in analyses, device) or _objects_error(analysis, kinds)
-                 or _fire_error(analysis, others) or _record_error(record_mode, every_s))
+        error = (_camera_error(name, url, analysis in analyses) or output_error
+                 or _objects_error(analysis, kinds) or _fire_error(analysis, others)
+                 or _record_error(record_mode, every_s))
         if error:
-            form = {"name": name, "url": redact(url), "analysis": analysis, "device": device, "part": part,
-                    "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
+            form = {"name": name, "url": redact(url), "analysis": analysis, "output_id": output,
+                    "part": part, "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
                     "record_while_present": record_while_present}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                         objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                         **_live(request, camera), **_choices(request, analyses))
         camera.name, camera.url, camera.part = name.strip(), url.strip(), part
-        camera.analysis, camera.device = analysis, device
+        camera.analysis, camera.output_id = analysis, output
         camera.record_mode, camera.record_every_s = record_mode, every_s or camera.record_every_s
         camera.record_while_present = record_while_present
         settings = objects if analysis == "objects" else others.get(analysis)
@@ -172,7 +179,7 @@ def camera_split(request: Request, camera_id: int) -> RedirectResponse:
     """One camera for each lens of a two-lens camera, which sends both in one picture, one above the other.
 
     Both keep the same address: the recognition service still opens the camera once. Both record with
-    the camera's analysis; only the first keeps its device, so a door opens once and a person seen by
+    the camera's analysis; only the first keeps its device output, so it switches once and a person seen by
     both lenses is one entry, not two.
     """
     t = translator(request)
@@ -183,7 +190,7 @@ def camera_split(request: Request, camera_id: int) -> RedirectResponse:
         name = camera.name[:70]
         camera.name, camera.part = t("{name} (top)", name=name), "top"
         session.add(Camera(name=t("{name} (bottom)", name=name), url=camera.url, analysis=camera.analysis,
-                           device="", part="bottom", enabled=camera.enabled))
+                           part="bottom", enabled=camera.enabled))
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera split", name)
     flash(request, "{name} is now two cameras, one for each lens.", name=name)
@@ -207,14 +214,14 @@ def _switch(request: Request, camera_id: int, on: bool, next: str) -> RedirectRe
         camera.enabled = on
         bump(session, CAMERAS_VERSION)
         audit(session, request.session["user"], "camera started" if on else "camera stopped", camera.name)
-        name, door, records = camera.name, camera.device == "door", bool(camera.analysis)
+        name, switches, records = camera.name, camera.output_id is not None, bool(camera.analysis)
     if not records:  # without an AI model, a camera only shows its picture
         flash(request, "Camera turned on: {name}." if on else "Camera turned off: {name}.", name=name)
     elif on:
         flash(request, "Recording started: {name}.", name=name)
-    elif door:
-        flash(request, "Recording stopped: {name}. Nobody is recognized at this door until you start it again.",
-              "warn", name=name)
+    elif switches:
+        flash(request, "Recording stopped: {name}. Nobody is recognized here, and its device isn't switched, until you "
+              "start it again.", "warn", name=name)
     else:
         flash(request, "Recording stopped: {name}.", "warn", name=name)
     return RedirectResponse(safe_next(next), status_code=303)
@@ -291,7 +298,7 @@ def camera_states(request: Request) -> JSONResponse:
 
 @router.get("/cameras/{camera_id}/state")
 def camera_state(request: Request, camera_id: int) -> JSONResponse:
-    """What the door decided just now, for the live frame: green with the name, or red."""
+    """What the camera decided just now, for the live frame: green with the name, or red."""
     status = services(request).vision.camera_status(camera_id)
     state = status.get("state") if status and status.get("online") else None
     t = translator(request)
@@ -325,14 +332,32 @@ def _get(session, camera_id: int) -> Camera:
     return camera
 
 
-def _camera_error(name: str, url: str, analysis_ok: bool, device: str) -> str:
+def _camera_error(name: str, url: str, analysis_ok: bool) -> str:
     if not name.strip():
         return "Give the camera a name, such as Staff entrance."
     if not url.strip():
         return "Write the camera address."
-    if not analysis_ok or device not in DEVICES:
-        return "Choose the AI model and the device attached to the camera."
+    if not analysis_ok:
+        return "Choose the AI model."
     return ""
+
+
+def _device_outputs(request: Request) -> list[dict]:
+    """The device outputs a camera can switch, by device: [{"name", "outputs": [{"id", "name", "seconds"}]}]."""
+    with services(request).db.session() as session:
+        devices = session.scalars(select(Device).options(selectinload(Device.outputs)).order_by(Device.name)).all()
+        return [{"name": d.name, "outputs": [{"id": o.id, "name": o.name, "seconds": max(1, round(o.pulse_ms / 1000))}
+                                             for o in d.outputs]} for d in devices if d.outputs]
+
+
+def _device_output(request: Request, analysis: str, output_id: str) -> tuple[int | None, str]:
+    """The output the camera switches, and an error for one removed meanwhile. None with none chosen, or without
+    face recognition, which is what switches it: the choice stays in the form, hidden, for another model."""
+    if analysis != "faces" or not output_id.isdigit():
+        return None, ""
+    if int(output_id) not in {o["id"] for d in _device_outputs(request) for o in d["outputs"]}:
+        return None, "That output was removed. Choose another one, or none."
+    return int(output_id), ""
 
 
 def _objects_error(analysis: str, kinds: list[str]) -> str:
@@ -405,7 +430,8 @@ def _choices(request: Request, analyses: dict[str, tuple[str, bool]]) -> dict[st
     """What the camera form offers: the AI models, the devices, and the kinds of things to look for."""
     models_dir = services(request).cfg.paths.models_dir
     detectors = {key: (name, file_state(models_dir, file) == "ready") for key, (name, file) in DETECTORS.items()}
-    return {"analyses": analyses, "hints": ANALYSIS_HINTS, "devices": DEVICES, "things": NAMES, "common": COMMON,
+    return {"analyses": analyses, "hints": ANALYSIS_HINTS, "device_outputs": _device_outputs(request),
+            "things": NAMES, "common": COMMON,
             "groups": OTHER_GROUPS, "sensitivity": SENSITIVITY, "record_modes": RECORD_MODES,
             "record_hints": RECORD_HINTS, "units": UNIT_NAMES, "fire_things": FIRE_NAMES, "detectors": detectors}
 

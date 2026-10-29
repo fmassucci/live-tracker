@@ -226,7 +226,7 @@ def test_a_camera_chooses_when_to_keep_a_photo(client, cfg, monkeypatch):
 
 def test_the_records_tabs_count_each_view(client):
     with client.app.state.services.db.session() as session:
-        session.add(Event(at=datetime.now(), kind="detected", label="dog", count=1, score=0.8, door="", model="yolox",
+        session.add(Event(at=datetime.now(), kind="detected", label="dog", count=1, score=0.8, action="", model="yolox",
                           liveness="none"))
     faces = client.get("/records").text
     assert 'Rostos<span class="tab-count">0</span>' in faces
@@ -237,7 +237,7 @@ def test_the_records_tabs_count_each_view(client):
 def test_records_show_the_things_seen_in_their_own_view(client):
     with client.app.state.services.db.session() as session:
         for label, count in (("person", 2), ("person", 1), ("cell_phone", 1)):
-            session.add(Event(at=datetime.now(), kind="detected", label=label, count=count, score=0.87, door="",
+            session.add(Event(at=datetime.now(), kind="detected", label=label, count=count, score=0.87, action="",
                               model="yolox", liveness="none"))
     found = client.get("/records?view=objects").text
     assert "&times;2" in found and "87%" in found

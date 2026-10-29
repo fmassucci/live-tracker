@@ -1,7 +1,7 @@
 {# One camera on Today: its picture, live and big, beside what it recorded today, in a card as tall as the picture
    where the rest scrolls. The picture is already live, so it has no "watch live" link; a click on it opens Live,
-   bigger and with the camera's details. A face camera's picture lights up green or red when it decides, like a
-   door. #}
+   bigger and with the camera's details. A face camera's picture lights up green or red when it decides, like the
+   recognition screen. #}
 {% from "_macros.html" import camera_chip, switch_button %}
 {% set state = states[c.id] %}
 {% set sending = state in ("recording", "live", "no-model") %}

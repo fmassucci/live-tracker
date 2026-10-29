@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from live_tracker.db import FACES_VERSION, Embedding, Event, Person, Photo, get_setting
 from live_tracker.decision import Decision
 from live_tracker.events import EventLog, purge_events
-from live_tracker.people import door_allowed, load_gallery
+from live_tracker.people import load_gallery, with_access
 
 
 def _person(session, name: str, **fields) -> Person:
@@ -37,16 +37,16 @@ def test_avatars_are_a_close_crop_of_the_face_and_go_with_the_photo(cfg, db, peo
         assert not crop.exists()
 
 
-def test_gallery_has_active_people_only_and_door_access_is_separate(db, people):
+def test_gallery_has_active_people_only_and_access_is_separate(db, people):
     with db.session() as session:
         ana = _person(session, "Ana")
-        bia = _person(session, "Bia", door_access=False)
+        bia = _person(session, "Bia", access=False)
         old = _person(session, "Caio", active=False)
         for person, color in ((ana, (200, 60, 60)), (bia, (60, 200, 60)), (old, (60, 60, 200))):
             people.add_photo(session, person, textured(color), "upload")
         gallery = load_gallery(session, "auraface")
         assert sorted(gallery.names.values()) == ["Ana", "Bia"]
-        assert door_allowed(session) == {str(ana.id)}
+        assert with_access(session) == {str(ana.id)}
 
 
 def test_a_photo_of_someone_already_registered_is_flagged(db, people):
@@ -66,7 +66,7 @@ def test_deleting_a_person_removes_photos_files_and_embeddings_but_keeps_events(
         ana_id = ana.id
     EventLog(db, cfg.paths.data_dir).record(
         Decision("recognized", str(ana_id), 0.8), textured((0, 0, 0), 64),
-        camera_id=None, person_name="Ana", door="shadow", model="auraface", liveness="none",
+        camera_id=None, person_name="Ana", action="shadow", model="auraface", liveness="none",
     )
     with db.session() as session:
         people.delete_person(session, session.get(Person, ana_id))
@@ -80,7 +80,7 @@ def test_deleting_a_person_removes_photos_files_and_embeddings_but_keeps_events(
 def test_old_events_and_their_snapshots_are_purged(cfg, db):
     log = EventLog(db, cfg.paths.data_dir)
     log.record(Decision("unknown", None, 0.1), np.zeros((32, 32, 3), np.uint8),
-               camera_id=None, person_name=None, door="kept", model="auraface", liveness="none")
+               camera_id=None, person_name=None, action="denied", model="auraface", liveness="none")
     with db.session() as session:
         event = session.scalars(select(Event)).one()
         snapshot = cfg.paths.data_dir / event.snapshot

@@ -31,7 +31,7 @@ class DetectionConfig:
     detect_width: int = 640
     score_threshold: float = 0.8
     min_face_px: int = 80
-    max_yaw: float = 0.25         # at the door: about 30 degrees of head turn
+    max_yaw: float = 0.25         # at the camera: about 30 degrees of head turn
     enroll_max_yaw: float = 0.38  # enrollment photos: about 40 degrees, since some variety helps
     min_sharpness: float = 30.0
 
@@ -59,8 +59,8 @@ class DecisionConfig:
 
 
 @dataclass
-class DoorConfig:
-    mode: str = "shadow"
+class DevicesConfig:
+    mode: str = "shadow"  # "live": cameras switch their devices; "shadow": only logged (switching.py)
 
 
 @dataclass
@@ -81,9 +81,9 @@ class PreviewConfig:
 
 @dataclass
 class WebConfig:
-    host: str = "0.0.0.0"  # every network this computer is on, so phones and the door tablet can open it
+    host: str = "0.0.0.0"  # every network this computer is on, so phones and the tablet screen can open it
     port: int = 8000
-    language: str = "pt"  # default for new sessions, the door screen and the video labels
+    language: str = "pt"  # default for new sessions, the recognition screen and the video labels
 
 
 @dataclass
@@ -104,7 +104,7 @@ class Config:
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
     liveness: LivenessConfig = field(default_factory=LivenessConfig)
     decision: DecisionConfig = field(default_factory=DecisionConfig)
-    door: DoorConfig = field(default_factory=DoorConfig)
+    devices: DevicesConfig = field(default_factory=DevicesConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     web: WebConfig = field(default_factory=WebConfig)
