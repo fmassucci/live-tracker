@@ -109,6 +109,13 @@
     send();
   };
 
+  // Browsers only go full screen after a tap, so the first one on the screen does it. Leaving, with the device's
+  // back button or gesture, is up to the browser, and the next tap comes back.
+  document.addEventListener("click", () => {
+    const page = document.documentElement;
+    if (!document.fullscreenElement && page.requestFullscreen) page.requestFullscreen().catch(() => {});
+  });
+
   tick();
   setInterval(tick, 1000);
   if (own) filmHere();
