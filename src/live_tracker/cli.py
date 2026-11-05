@@ -18,6 +18,10 @@ from contextlib import suppress
 from pathlib import Path
 
 from live_tracker.config import RECOGNITION_MODELS, Config, load_config, rename_legacy_database
+from live_tracker.network import local_ipv4
+from live_tracker.tls import ensure_certificate
+
+log = logging.getLogger(__name__)
 
 START_TIMEOUT_S = 90.0  # for `start`: after the computer starts, loading the AI models can take a while
 CLOSE_AFTER_S = 5.0  # how long `start` still shows that the system runs, before its window closes
@@ -173,8 +177,12 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
     server = uvicorn.Server(uvicorn.Config(app, host=cfg.web.host, port=cfg.web.port, log_level="warning",
                                            timeout_graceful_shutdown=5))
 
+    secure = _secure_server(cfg, app)
+
     def stop() -> None:  # Stop the system, in Settings
         server.should_exit = True
+        if secure:
+            secure.should_exit = True
 
     app.state.services.stop_web = stop
     try:
@@ -182,6 +190,26 @@ def _web(cfg: Config, args: argparse.Namespace) -> int:
     except KeyboardInterrupt:  # Ctrl+C: uvicorn stops, then raises it again
         pass
     return 0 if server.started else 1
+
+
+def _secure_server(cfg: Config, app: object) -> object | None:
+    """The web UI's https port, started on a thread of its own, or None when it's off or can't have a certificate:
+    the plain port stays up either way. Ctrl+C reaches only the main thread, which then ends this one with it."""
+    import uvicorn
+
+    if not cfg.web.https_port:
+        return None
+    try:
+        certificate, key = ensure_certificate(cfg.paths.data_dir / "tls", ["127.0.0.1", *local_ipv4()])
+    except (OSError, ValueError):
+        log.exception("no https port: its certificate can't be made")
+        cfg.web.https_port = 0  # so the recognition screen doesn't send a tablet there
+        return None
+    server = uvicorn.Server(uvicorn.Config(app, host=cfg.web.host, port=cfg.web.https_port, log_level="warning",
+                                           lifespan="off", timeout_graceful_shutdown=5,
+                                           ssl_certfile=str(certificate), ssl_keyfile=str(key)))
+    threading.Thread(target=server.run, name="https", daemon=True).start()
+    return server
 
 
 def _start(cfg: Config, args: argparse.Namespace) -> int:

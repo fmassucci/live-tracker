@@ -57,6 +57,7 @@ port = 8080
 [web]
 host = "0.0.0.0"         # other devices on the network can open it; "127.0.0.1" for this computer only
 port = 8000
+https_port = 8443        # the same over https, which browsers require for a tablet's own camera; 0 turns it off
 language = "pt"          # "pt" or "en": default for new sessions, the recognition screen and video labels
 
 [storage]

@@ -83,6 +83,7 @@ class PreviewConfig:
 class WebConfig:
     host: str = "0.0.0.0"  # every network this computer is on, so phones and the tablet screen can open it
     port: int = 8000
+    https_port: int = 8443  # the same web UI over https, for what browsers only allow there, such as the camera; 0: off
     language: str = "pt"  # default for new sessions, the recognition screen and the video labels
 
 

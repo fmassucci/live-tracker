@@ -61,6 +61,7 @@ def cfg(tmp_path) -> Config:
     config.paths.data_dir = tmp_path / "data"
     config.paths.models_dir = tmp_path / "models"
     config.preview.port = free_port()  # never a recognition service running on this machine
+    config.web.https_port = 0  # tests turn it on when they're about it
     return config
 
 

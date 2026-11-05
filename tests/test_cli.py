@@ -18,13 +18,13 @@ from live_tracker.service import VisionService
 from live_tracker.web.vision_client import VisionClient
 
 
-def _config_file(tmp_path, cfg, web_port: int) -> str:
+def _config_file(tmp_path, cfg, web_port: int, https_port: int = 0) -> str:
     """config.toml with cfg's folders and service port, and the web UI on this computer only, at web_port."""
     path = tmp_path / "config.toml"
     path.write_text(
         f"[paths]\ndata_dir = '{cfg.paths.data_dir.as_posix()}'\nmodels_dir = '{cfg.paths.models_dir.as_posix()}'\n"
         f"[preview]\nport = {cfg.preview.port}\n"
-        f"[web]\nhost = '127.0.0.1'\nport = {web_port}\n"
+        f"[web]\nhost = '127.0.0.1'\nport = {web_port}\nhttps_port = {https_port}\n"
     )
     return str(path)
 
@@ -68,6 +68,38 @@ def test_stop_the_system_stops_the_web_ui(tmp_path, cfg, monkeypatch):
     monkeypatch.setattr(uvicorn, "Server", fake_server(serve))
     assert main(["--config", _config_file(tmp_path, cfg, free_port()), "web"]) == 0
     assert stopped == [True]
+
+
+def test_the_web_ui_also_answers_over_https_and_stops_with_the_plain_port(tmp_path, cfg, monkeypatch):
+    seen: dict[int, Any] = {}
+    secure_port = free_port()
+
+    def serve(server) -> None:
+        seen[server.config.port] = server
+        if server.config.port != secure_port:  # the main thread's: the other starts first, on its own thread
+            deadline = time.monotonic() + 5
+            while len(seen) < 2 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            server.config.app.state.services.stop_web()
+
+    monkeypatch.setattr(uvicorn, "Server", fake_server(serve))
+    assert main(["--config", _config_file(tmp_path, cfg, free_port(), secure_port), "web"]) == 0
+    assert len(seen) == 2 and all(server.should_exit for server in seen.values())
+    secure = seen[secure_port].config
+    assert Path(secure.ssl_certfile).is_file() and Path(secure.ssl_keyfile).is_file()
+
+
+def test_without_a_certificate_only_the_plain_port_starts(tmp_path, cfg, monkeypatch):
+    ports: list[int] = []
+
+    def refuse(directory, addresses):
+        raise OSError("no room on the disk")
+
+    monkeypatch.setattr(cli, "ensure_certificate", refuse)
+    monkeypatch.setattr(uvicorn, "Server", fake_server(lambda server: ports.append(server.config.port)))
+    web_port = free_port()
+    assert main(["--config", _config_file(tmp_path, cfg, web_port, free_port()), "web"]) == 0
+    assert ports == [web_port]
 
 
 def test_a_web_ui_already_running_is_only_opened(tmp_path, cfg, monkeypatch):
