@@ -191,6 +191,23 @@
         <form method="post" action="/settings/screen/new-key">
           <button class="button button-quiet button-small">{{ t("Create a new address") }}</button>
         </form>
+        {% if is_admin %}
+        <form method="post" action="/settings/screen/pin" style="margin-top: 18px">
+          <div class="field" style="margin-bottom: 8px">
+            <label for="screen-pin">{{ t("PIN to leave full screen") }}</label>
+            <div class="copy-field">
+              <input type="password" inputmode="numeric" id="screen-pin" name="pin" minlength="4" maxlength="8" pattern="[0-9]*" autocomplete="new-password" placeholder="{{ t('A PIN is set') if screen_pin_set else t('4 to 8 digits') }}">
+              <button class="button button-quiet">{{ t("Save") }}</button>
+            </div>
+            <span class="hint">{{ t("Four quick taps on the recognition screen ask for it, and it keeps the screen out of full screen until the page is opened again. Without it, the next tap goes back. It can't stop the device's back button: to confine the tablet, also pin Chrome in Android.") }}</span>
+          </div>
+        </form>
+        {% if screen_pin_set %}
+        <form method="post" action="/settings/screen/pin/remove">
+          <button class="button button-quiet button-small">{{ t("Remove PIN") }}</button>
+        </form>
+        {% endif %}
+        {% endif %}
         {% endif %}
       </div>
       <dl class="facts">

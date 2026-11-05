@@ -15,12 +15,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from live_tracker.db import (
-    STOP_REQUESTS, AuditEntry, Camera, Device, DeviceCommand, DeviceInput, DeviceOutput, Event, Person, User, get_setting,
+    SCREEN_PIN, STOP_REQUESTS, AuditEntry, Camera, Device, DeviceCommand, DeviceInput, DeviceOutput, Event, Person, User, get_setting,
 )
 from live_tracker.devices.tuya import CloudDevice, CloudOutput
 from live_tracker.events import face_path
 from live_tracker.users import authenticate, create_user, is_admin, user_exists
-from live_tracker.web import kiosk
+from live_tracker.web import common, kiosk
 from live_tracker.web.app import create_app
 from live_tracker.web.common import recording_state
 
@@ -976,3 +976,78 @@ def test_only_a_tall_picture_gets_a_tall_card(client, app, size, tall):
 
     app.state.services.vision = Sending()
     assert ("camera-thumb-tall" in client.get("/cameras").text) is tall
+
+
+def _screen_with_pin(client, app, pin: str = "4321") -> tuple[str, str]:
+    """The addresses of a recognition screen and of its PIN check, with this PIN set in Settings."""
+    camera, key = _tablet_camera(app)
+    client.post("/settings/screen/pin", data={"pin": pin})
+    return f"/screen?camera={camera}&key={key}", f"/screen/unlock?camera={camera}&key={key}"
+
+
+def test_the_pin_is_set_in_settings_and_never_stored_or_shown_as_it_is(client, app):
+    screen, _ = _screen_with_pin(client, app)
+    with app.state.services.db.session() as session:
+        stored = get_setting(session, SCREEN_PIN)
+    assert stored.startswith("scrypt$") and "4321" not in stored
+    assert 'id="pin"' in client.get(screen).text and "4321" not in client.get(screen).text
+    assert "Já existe um PIN" in client.get("/settings").text
+
+
+def test_a_screen_without_a_pin_has_no_keypad_and_nothing_to_check(client, app):
+    camera, key = _tablet_camera(app)
+    assert 'id="pin"' not in client.get(f"/screen?camera={camera}&key={key}").text
+    assert client.post(f"/screen/unlock?camera={camera}&key={key}", data={"pin": "4321"}).status_code == 404
+
+
+@pytest.mark.parametrize("pin", ["", "123", "123456789", "12a4", "١٢٣٤"])
+def test_a_pin_is_4_to_8_digits(client, app, pin):
+    client.post("/settings/screen/pin", data={"pin": pin})
+    with app.state.services.db.session() as session:
+        assert not get_setting(session, SCREEN_PIN)
+
+
+def test_only_an_administrator_sets_or_removes_the_pin(app):
+    with app.state.services.db.session() as session:
+        create_user(session, "caixa", "senha-do-caixa")
+    with TestClient(app) as cashier:
+        cashier.post("/login", data={"username": "caixa", "password": "senha-do-caixa"})
+        assert cashier.post("/settings/screen/pin", data={"pin": "4321"}).status_code == 403
+        assert cashier.post("/settings/screen/pin/remove").status_code == 403
+
+
+def test_the_right_pin_passes_and_goes_to_the_audit_log(client, app):
+    _, unlock = _screen_with_pin(client, app)
+    assert client.post(unlock, data={"pin": "0000"}).status_code == 403
+    assert client.post(unlock, data={"pin": "4321"}).status_code == 204
+    with app.state.services.db.session() as session:
+        entry = session.scalars(select(AuditEntry).where(AuditEntry.action == "left full screen")).one()
+    assert entry.detail == "Portaria"
+
+
+def test_the_pin_check_needs_the_screens_secret_address(client, app):
+    _, unlock = _screen_with_pin(client, app)
+    assert client.post(unlock.split("&key=")[0] + "&key=wrong", data={"pin": "4321"}).status_code == 404
+
+
+def test_too_many_wrong_pins_stop_the_checking_for_a_while(client, app, monkeypatch):
+    _, unlock = _screen_with_pin(client, app)
+    for _ in range(common.MAX_WRONG_PINS):
+        assert client.post(unlock, data={"pin": "0000"}).status_code == 403
+    assert client.post(unlock, data={"pin": "4321"}).status_code == 429  # even the right one, meanwhile
+    app.state.services.pin_tries.wait_until = 0.0
+    assert client.post(unlock, data={"pin": "4321"}).status_code == 204
+
+
+def test_a_right_pin_clears_the_wrong_ones_before_it(client, app):
+    _, unlock = _screen_with_pin(client, app)
+    for _ in range(common.MAX_WRONG_PINS - 1):
+        client.post(unlock, data={"pin": "0000"})
+    client.post(unlock, data={"pin": "4321"})
+    assert client.post(unlock, data={"pin": "0000"}).status_code == 403  # would have been the fifth
+
+
+def test_removing_the_pin_removes_the_keypad(client, app):
+    screen, _ = _screen_with_pin(client, app)
+    client.post("/settings/screen/pin/remove")
+    assert 'id="pin"' not in client.get(screen).text

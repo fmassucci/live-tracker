@@ -6,6 +6,7 @@ The Database panel's actions are in data.py.
 
 from __future__ import annotations
 
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -18,8 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
-from live_tracker.db import STOP_REQUESTS, Camera, User, audit, bump, get_setting, set_setting
-from live_tracker.users import AccountError, create_user, is_admin, remove_user, rename_user, set_admin, set_password
+from live_tracker.db import SCREEN_PIN, STOP_REQUESTS, Camera, User, audit, bump, get_setting, set_setting
+from live_tracker.users import (
+    AccountError, create_user, hash_password, is_admin, remove_user, rename_user, set_admin, set_password,
+)
 from live_tracker.web.common import (
     flash, on_this_computer, page, require_admin, require_user, services, tablet_address, web_addresses,
 )
@@ -40,12 +43,14 @@ def settings_page(request: Request) -> HTMLResponse:
     with s.db.session() as session:
         display_name = get_setting(session, "display_name") or ""
         screen_key = get_setting(session, "screen_key")
+        screen_pin_set = bool(get_setting(session, SCREEN_PIN))
         screen_cameras = session.scalars(select(Camera).where(Camera.analysis == "faces").order_by(Camera.name)).all()
         me = request.session["user"]
         users = session.scalars(select(User).order_by(User.username != me, User.username)).all()  # yours first
         admin_signed_in = is_admin(session, me)
     here, others = web_addresses(s.cfg)
     return page(request, "settings.html", section="settings", display_name=display_name, screen_key=screen_key,
+                screen_pin_set=screen_pin_set,
                 screen_cameras=screen_cameras, users=users, cfg=s.cfg, screen_base_url=tablet_address(request),
                 here_address=here, network_addresses=others, is_admin=admin_signed_in,
                 data_folder=s.cfg.paths.data_dir.resolve(), on_this_computer=on_this_computer(request),
@@ -100,6 +105,27 @@ def new_screen_key(request: Request) -> RedirectResponse:
         set_setting(session, "screen_key", secrets.token_urlsafe(12))
         audit(session, request.session["user"], "recognition screen address changed")
     flash(request, "New recognition screen address created. Open it again on the tablet; the old one no longer works.")
+    return RedirectResponse("/settings#screen", status_code=303)
+
+
+@admin.post("/settings/screen/pin")
+def set_screen_pin(request: Request, pin: str = Form(""), user: str = Depends(require_admin)) -> RedirectResponse:
+    if not re.fullmatch(r"[0-9]{4,8}", pin):
+        flash(request, "The PIN must have 4 to 8 digits.", "bad")
+        return RedirectResponse("/settings#screen", status_code=303)
+    with services(request).db.session() as session:
+        set_setting(session, SCREEN_PIN, hash_password(pin))
+        audit(session, user, "recognition screen PIN changed")
+    flash(request, "PIN saved. Open the recognition screen again on the tablet.")
+    return RedirectResponse("/settings#screen", status_code=303)
+
+
+@admin.post("/settings/screen/pin/remove")
+def remove_screen_pin(request: Request, user: str = Depends(require_admin)) -> RedirectResponse:
+    with services(request).db.session() as session:
+        set_setting(session, SCREEN_PIN, "")
+        audit(session, user, "recognition screen PIN removed")
+    flash(request, "PIN removed.")
     return RedirectResponse("/settings#screen", status_code=303)
 
 

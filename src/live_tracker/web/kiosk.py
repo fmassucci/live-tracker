@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from live_tracker.camera import is_browser
-from live_tracker.db import Camera, Person, get_setting
+from live_tracker.db import SCREEN_PIN, Camera, Person, audit, get_setting
 from live_tracker.faces import BLURRY, TOO_SMALL, TURNED_AWAY
 from live_tracker.i18n import Translator
 from live_tracker.pipeline import FROZEN
+from live_tracker.users import verify_password
 from live_tracker.web.common import branding, services
 
 router = APIRouter()
@@ -42,7 +43,7 @@ def recognition_screen(request: Request, camera: int, key: str, lang: str = "") 
     t = Translator(lang or s.cfg.web.language)
     return s.templates.TemplateResponse(request, "kiosk.html", {
         "t": t, "lang": t.language, "brand": branding(s), "camera": camera, "camera_name": row.name, "key": key,
-        "own_camera": is_browser(row.url),
+        "own_camera": is_browser(row.url), "pin_set": bool(_stored_pin(request)),
     })
 
 
@@ -89,6 +90,31 @@ async def screen_frame(request: Request, camera: int, key: str) -> Response:
     if not await run_in_threadpool(services(request).vision.send_frame, f"cam{camera}", jpeg):
         raise HTTPException(503)
     return Response(status_code=204)
+
+
+@router.post("/screen/unlock")
+def screen_unlock(request: Request, camera: int, key: str, pin: str = Form("")) -> Response:
+    """Whether the PIN set in Settings lets the screen stay out of full screen. It's checked here, so the page never
+    holds it. What this guards is the page's own way out: no page can stop the device's back button."""
+    s = services(request)
+    row = _check(request, camera, key)
+    stored = _stored_pin(request)
+    if not stored:
+        raise HTTPException(404)
+    if s.pin_tries.waiting():
+        raise HTTPException(429)
+    if not verify_password(pin, stored):
+        s.pin_tries.failed()
+        raise HTTPException(403)
+    s.pin_tries.passed()
+    with s.db.session() as session:
+        audit(session, "recognition screen", "left full screen", row.name)
+    return Response(status_code=204)
+
+
+def _stored_pin(request: Request) -> str:
+    with services(request).db.session() as session:
+        return get_setting(session, SCREEN_PIN) or ""
 
 
 def _check(request: Request, camera_id: int, key: str) -> Camera:

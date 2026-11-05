@@ -35,6 +35,7 @@ CAMERAS_VERSION = "cameras_version"
 MODELS_VERSION = "models_version"  # a model was downloaded or removed
 DEVICES_VERSION = "devices_version"  # a device or one of its outputs was added, changed or removed
 STOP_REQUESTS = "stop_requests"  # bumped when Settings stops the system: the recognition service stops
+SCREEN_PIN = "screen_pin"  # hash of the PIN that keeps the recognition screen out of full screen; empty: none
 
 
 class Base(DeclarativeBase):

@@ -109,11 +109,84 @@
     send();
   };
 
-  // Browsers only go full screen after a tap, so the first one on the screen does it. Leaving, with the device's
-  // back button or gesture, is up to the browser, and the next tap comes back.
+  // Browsers only go full screen after a tap, so the first one on the screen does it. The device's back button leaves
+  // it, which no page can stop, and the next tap comes back. With a PIN set in Settings, only the PIN ends that, until
+  // the page is opened again: 4 quick taps ask for it.
+  const keypad = document.getElementById("pin");
+  let released = false;
+  let taps = [];
+
+  const pinPad = () => {
+    const IDLE_MS = 30000; // nobody typing: it goes away by itself, off the screen people look at
+    const dots = document.getElementById("pin-dots");
+    const note = document.getElementById("pin-note");
+    let typed = "";
+    let idle;
+
+    const write = () => { dots.textContent = "\u2022".repeat(typed.length); };
+    const close = () => {
+      clearTimeout(idle);
+      typed = "";
+      keypad.hidden = true;
+    };
+    const keepOpen = () => {
+      clearTimeout(idle);
+      idle = setTimeout(close, IDLE_MS);
+    };
+
+    const confirm = async () => {
+      let status = 0;
+      try {
+        const body = new URLSearchParams({ pin: typed });
+        status = (await fetch(keypad.dataset.url, { method: "POST", body })).status;
+      } catch {
+        note.textContent = data.offlineTitle;
+        return;
+      }
+      if (status === 204) {
+        released = true;
+        close();
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        return;
+      }
+      typed = "";
+      write();
+      note.textContent = status === 429 ? keypad.dataset.wait : keypad.dataset.wrong;
+    };
+
+    keypad.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const { key } = button.dataset;
+      keepOpen();
+      if (key === "cancel") close();
+      else if (key === "confirm") confirm();
+      else if (key === "erase") typed = typed.slice(0, -1);
+      else if (typed.length < 8) typed += key;
+      if (!keypad.hidden) write();
+    });
+
+    return () => {
+      note.textContent = "";
+      write();
+      keypad.hidden = false;
+      keepOpen();
+    };
+  };
+
+  const askForPin = keypad ? pinPad() : null;
+
   document.addEventListener("click", () => {
+    if (released || (keypad && !keypad.hidden)) return;
     const page = document.documentElement;
     if (!document.fullscreenElement && page.requestFullscreen) page.requestFullscreen().catch(() => {});
+    if (!keypad) return;
+    const now = Date.now();
+    taps = taps.filter((at) => now - at < 2000).concat(now);
+    if (taps.length >= 4) {
+      taps = [];
+      askForPin();
+    }
   });
 
   tick();

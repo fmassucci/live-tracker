@@ -45,6 +45,25 @@
     <p class="kiosk-detail" id="detail"></p>
   </div>
 </main>
+{% if pin_set %}
+<div class="kiosk-pin" id="pin" role="dialog" aria-labelledby="pin-title" hidden
+     data-url="/screen/unlock?camera={{ camera }}&key={{ key }}"
+     data-wrong="{{ t('Wrong PIN') }}"
+     data-wait="{{ t('Too many tries. Wait a moment.') }}">
+  <div class="kiosk-pin-box">
+    <h2 id="pin-title">{{ t("Enter the PIN") }}</h2>
+    <p class="kiosk-pin-dots" id="pin-dots"></p>
+    <p class="kiosk-pin-note" id="pin-note" aria-live="polite"></p>
+    <div class="kiosk-pin-keys">
+      {% for digit in "123456789" %}<button type="button" data-key="{{ digit }}">{{ digit }}</button>{% endfor %}
+      <button type="button" data-key="erase" aria-label="{{ t('Erase') }}">{{ icon("chevron-left") }}</button>
+      <button type="button" data-key="0">0</button>
+      <button type="button" data-key="confirm" aria-label="{{ t('Confirm') }}">{{ icon("check") }}</button>
+    </div>
+    <button type="button" class="kiosk-pin-cancel" data-key="cancel">{{ t("Cancel") }}</button>
+  </div>
+</div>
+{% endif %}
 <script src="/static/kiosk.js?v={{ asset_version }}" defer></script>
 </body>
 </html>

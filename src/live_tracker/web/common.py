@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -22,7 +23,7 @@ from live_tracker.people import People
 from live_tracker.users import is_admin, user_exists
 from live_tracker.web.vision_client import VisionClient
 
-ASSET_VERSION = "44"  # bump to make browsers reload the stylesheet, scripts and icons
+ASSET_VERSION = "45"  # bump to make browsers reload the stylesheet, scripts and icons
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -68,6 +69,29 @@ def recording_state(camera: Camera, status: dict | None, service_up: bool) -> st
     return "no-model" if status.get("model_missing") else "recording"
 
 
+MAX_WRONG_PINS = 5
+PIN_WAIT_S = 30.0  # after that many wrong PINs in a row, how long none is even checked
+
+
+@dataclass
+class PinTries:
+    """Wrong PINs on the recognition screen: a few digits can't be given unlimited guesses."""
+
+    wrong: int = 0
+    wait_until: float = 0.0
+
+    def waiting(self) -> bool:
+        return time.monotonic() < self.wait_until
+
+    def failed(self) -> None:
+        self.wrong += 1
+        if self.wrong >= MAX_WRONG_PINS:
+            self.wrong, self.wait_until = 0, time.monotonic() + PIN_WAIT_S
+
+    def passed(self) -> None:
+        self.wrong = 0
+
+
 @dataclass
 class Services:
     cfg: Config
@@ -76,6 +100,7 @@ class Services:
     vision: VisionClient
     templates: Jinja2Templates
     stop_web: Callable[[], None] = lambda: None  # stops this web UI; `live-tracker web` sets it (cli.py)
+    pin_tries: PinTries = field(default_factory=PinTries)
 
 
 class LoginRequired(Exception):
