@@ -106,6 +106,8 @@ doors, switch lights and sound alarms. Planned with the user on 2026-10-24; tick
 ## Smaller items
 
 - [ ] Camera form: separate user and password fields, so passwords with `#` work as typed and stay hidden
+- [ ] A tablet nobody attends should trust the https port's certificate for good: browsers repeat their warning
+      about it every so often. `data/tls/web.crt` is made to be installed as a CA on the device
 - [ ] Rotate a camera's picture by 180° (the Jortan films upside down when it stands on a table)
 - [ ] Split two-lens pictures that sit side by side; only top and bottom work now
 - [ ] Start the app with Windows

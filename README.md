@@ -130,6 +130,7 @@ this computer, set `[web] host = "127.0.0.1"`. The recognition screen's address 
    `rtsp://admin:PASSWORD@IP:554/onvif1` (write a `#` in the password as `%23`), and the network search may
    not list it. A dual-lens Jortan sends both lenses in one picture, one above the other: *Split into two
    cameras*, on the camera's edit page, makes one camera for each lens.
+   A tablet or phone can be camera and screen at once: see [A tablet as camera and screen](#a-tablet-as-camera-and-screen).
 2. **People:** add each person with 3 to 5 face photos. Each photo is checked as soon as it is chosen. Photos
    taken by the camera that recognizes them (*Take photos with a camera*) match best. Photos require confirming that the
    person was told how their face is used (LGPD).
@@ -151,6 +152,37 @@ this computer, set `[web] host = "127.0.0.1"`. The recognition screen's address 
 5. **Settings:** name and logo shown in the app and accounts. *System* has the addresses for this computer,
    phones and tablets, and the recognition screen's address. *Database*, for administrators, has where the images
    are stored, and downloads or deletes records with their pictures.
+
+### A tablet as camera and screen
+
+A tablet or phone on the network can film and show the recognition screen at the same time, with nothing to
+install. The page uses the front camera, shows it, and sends about 6 pictures a second to the recognition service,
+where they count like any camera's: the same checks, records and device.
+
+1. **Cameras:** add a camera and choose *The tablet's own camera* under *Source*. Its edit page then has the address
+   to open. To avoid typing it, sign in on the tablet and press *Open* there.
+2. Browsers only give a page the camera over https, so this page moves by itself to the web UI's https port
+   (`[web] https_port`, 8443). The first time, the browser warns that the connection isn't private, since the
+   computer signed its own certificate (kept in `data/tls/`): choose *Advanced*, then continue to the address.
+3. Allow the camera, then tap the screen once: it goes full screen. Browsers only allow that after a tap, so it takes
+   one more each time the page is opened.
+
+Reserve this computer's address in the router: a new address means a new certificate, and the warning again. The
+browser may also repeat the warning after a while, the next time the page is reloaded.
+
+Settings, *PIN to leave full screen*, sets a PIN of 4 to 8 digits. With one set, any tap returns the page to full
+screen, and only the PIN keeps it out: 4 quick taps on the screen ask for it, and it lasts until the page is opened
+again. Five wrong PINs in a row stop the checking for 30 seconds, and each exit goes to the audit log. No page can
+stop the device's back button: to keep people in Chrome, also pin it in Android (*Pin windows*, under its security
+settings), which asks for the tablet's own PIN to leave.
+
+The camera only films while that page is open and in front, so leave the tablet on its charger. Chrome 84 and later
+keep the screen on by themselves; on an older tablet, turn on *Stay awake* in its developer options. Without the page,
+the camera shows as having no image and nobody is recognized there.
+
+Anyone with the address can send pictures as this camera, and the liveness check can't tell a video sent that way
+from the tablet's own: keep the address private, above all on a camera that switches a device. *Create a new
+address*, in Settings, replaces it.
 
 ## Command line
 
@@ -185,6 +217,7 @@ data/live-tracker.db     people, photos, face data, cameras, devices (with Tuya 
 data/photos/<id>/        face photos
 data/snapshots/<day>/    one picture per decision (and a face crop), deleted after [storage] retention_days
 data/branding/logo.png   the logo set in Settings
+data/tls/                the https port's certificate and its private key
 data/logs/               the messages of the recognition service and the web UI started by start.bat
 ```
 
