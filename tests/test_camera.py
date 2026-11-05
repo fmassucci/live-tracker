@@ -2,9 +2,10 @@ import re
 import socket
 import threading
 
+import cv2
 import numpy as np
 
-from live_tracker.camera import Frame, part_of, probe
+from live_tracker.camera import Frame, PushedCamera, is_browser, new_browser_source, part_of, probe
 
 SDP = ("v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=Camera\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n"
        "m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=control:trackID=0\r\n")
@@ -70,3 +71,33 @@ def test_each_lens_of_a_two_lens_picture_is_one_half():
     assert top.seq == bottom.seq == 7
     assert top.signature != bottom.signature  # a lens that freezes is noticed on its own
     assert part_of(frame, "") is frame
+
+
+def _jpeg(color: tuple[int, int, int]) -> bytes:
+    return cv2.imencode(".jpg", np.full((60, 80, 3), color, np.uint8))[1].tobytes()
+
+
+def test_a_camera_a_browser_films_for_keeps_the_newest_picture_sent():
+    camera = PushedCamera().start()
+    assert camera.next_frame(0, timeout=0.01) is None
+    assert camera.push(_jpeg((10, 200, 30))) and camera.push(_jpeg((200, 10, 30)))
+    frame = camera.next_frame(0, timeout=0.01)
+    assert frame.seq == 2 and frame.image.shape == (60, 80, 3) and frame.image[0, 0, 0] > 150
+    assert camera.next_frame(2, timeout=0.01) is None  # as a camera that stopped sending: it counts as offline
+
+
+def test_a_camera_a_browser_films_for_takes_only_pictures():
+    camera = PushedCamera()
+    assert not camera.push(b"") and not camera.push(b"not a picture")
+    assert camera.next_frame(0, timeout=0.01) is None
+
+
+def test_stopping_a_camera_a_browser_films_for_ends_it():
+    camera = PushedCamera()
+    camera.stop()
+    assert camera.ended
+
+
+def test_each_camera_a_browser_films_for_has_its_own_address():
+    first, second = new_browser_source(), new_browser_source()
+    assert first != second and is_browser(first) and not is_browser("rtsp://admin:x@192.168.0.2:554/onvif1")

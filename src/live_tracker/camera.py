@@ -1,4 +1,4 @@
-"""Frame source for RTSP cameras, video files and webcams."""
+"""Frame sources: RTSP cameras, video files and webcams, and the pictures a browser sends from its own camera."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import hashlib
 import logging
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 # camera can. Some cameras only stream over UDP and answer a TCP request with a reply FFmpeg rejects.
 TRANSPORTS = ("tcp", "udp")
 OPEN_TIMEOUT_MS = 5000
+BROWSER = "browser://"  # the start of the address of a camera a browser films for (PushedCamera)
 _options_lock = threading.Lock()
 
 
@@ -56,6 +58,15 @@ def is_rtsp(source: str) -> bool:
     return source.lower().startswith("rtsp")
 
 
+def is_browser(source: str) -> bool:
+    return source.startswith(BROWSER)
+
+
+def new_browser_source() -> str:
+    """An address of its own for a camera a browser films for: cameras with one address share one picture."""
+    return f"{BROWSER}{secrets.token_hex(4)}"
+
+
 def redact(source: str) -> str:
     """The source without its password, for logs."""
     return re.sub(r"//[^/@]*@", "//***@", source)
@@ -85,32 +96,13 @@ def _signature(image: np.ndarray) -> bytes:
     return hashlib.blake2b(image[::8, ::8].tobytes(), digest_size=16).digest()
 
 
-class Camera:
-    """Reads frames on a background thread and keeps only the newest.
+class FrameSource:
+    """Keeps only the newest frame: always taking it keeps the system reacting to what is in front of it now."""
 
-    Cheap cameras buffer seconds of video; always taking the latest frame keeps the door reacting
-    to what is in front of it now. Live streams reconnect on their own. Video files play at their
-    own frame rate and either loop or end the stream at EOF, which makes them handy for tests.
-    """
-
-    def __init__(self, source: str, reconnect_delay_s: float = 2.0, loop: bool = False) -> None:
-        self._source = source
-        self._is_file = os.path.isfile(source)
-        self._loop = loop
-        self._reconnect_delay_s = reconnect_delay_s
-        self._stop = threading.Event()
+    def __init__(self) -> None:
         self._cond = threading.Condition()
         self._latest: Frame | None = None
         self.ended = False
-        self._thread = threading.Thread(target=self._run, name="camera", daemon=True)
-
-    def start(self) -> Camera:
-        self._thread.start()
-        return self
-
-    def stop(self) -> None:
-        self._stop.set()
-        self._thread.join(timeout=10)
 
     def next_frame(self, after_seq: int, timeout: float) -> Frame | None:
         """The newest frame if it is newer than `after_seq`, waiting up to `timeout` seconds for one."""
@@ -121,14 +113,69 @@ class Camera:
             frame = self._latest
         return frame if frame is not None and frame.seq > after_seq else None
 
+    def _keep(self, image: np.ndarray) -> None:
+        signature = _signature(image)
+        with self._cond:
+            seq = self._latest.seq + 1 if self._latest else 1
+            self._latest = Frame(image, seq, time.monotonic(), signature)
+            self._cond.notify_all()
+
+    def _end(self) -> None:
+        with self._cond:
+            self.ended = True
+            self._cond.notify_all()
+
+
+class PushedCamera(FrameSource):
+    """A camera with nothing to connect to: a browser sends its pictures, one JPEG at a time (web/kiosk.py)."""
+
+    def start(self) -> PushedCamera:
+        return self
+
+    def stop(self) -> None:
+        self._end()
+
+    def push(self, jpeg: bytes) -> bool:
+        """Takes a picture; False when it isn't one."""
+        image = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR) if jpeg else None
+        if image is None:
+            return False
+        self._keep(image)
+        return True
+
+
+class Camera(FrameSource):
+    """Reads frames on a background thread.
+
+    Cheap cameras buffer seconds of video, which FrameSource leaves behind. Live streams reconnect on their
+    own. Video files play at their own frame rate and either loop or end the stream at EOF, which makes them
+    handy for tests.
+    """
+
+    def __init__(self, source: str, reconnect_delay_s: float = 2.0, loop: bool = False) -> None:
+        super().__init__()
+        self._source = source
+        self._is_file = os.path.isfile(source)
+        self._loop = loop
+        self._reconnect_delay_s = reconnect_delay_s
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="camera", daemon=True)
+
+    def start(self) -> Camera:
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=10)
+
     def _run(self) -> None:
-        seq = 0
         transport = TRANSPORTS[0]
         while not self._stop.is_set():
             capture = open_capture(self._source, transport)
             if capture.isOpened():
                 log.info("camera connected: %s%s", redact(self._source), " over UDP" if transport == "udp" else "")
-                seq = self._read_until_failure(capture, seq)
+                self._read_until_failure(capture)
             elif is_rtsp(self._source):  # the camera may only stream over the other transport
                 transport = "udp" if transport == "tcp" else "tcp"
             capture.release()
@@ -138,23 +185,17 @@ class Camera:
                 continue
             log.warning("camera unavailable: %s; retrying in %.0fs", redact(self._source), self._reconnect_delay_s)
             self._stop.wait(self._reconnect_delay_s)
-        with self._cond:
-            self.ended = True
-            self._cond.notify_all()
+        self._end()
 
-    def _read_until_failure(self, capture: cv2.VideoCapture, seq: int) -> int:
+    def _read_until_failure(self, capture: cv2.VideoCapture) -> None:
         period = 1.0 / (capture.get(cv2.CAP_PROP_FPS) or 25.0) if self._is_file else 0.0
         while not self._stop.is_set():
             ok, image = capture.read()
             if not ok:
                 break
-            seq += 1
-            with self._cond:
-                self._latest = Frame(image, seq, time.monotonic(), _signature(image))
-                self._cond.notify_all()
+            self._keep(image)
             if period:
                 self._stop.wait(period)
-        return seq
 
 
 def probe(source: str, seconds: float = 3.0) -> tuple[dict[str, object], np.ndarray | None]:
