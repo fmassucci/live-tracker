@@ -645,8 +645,10 @@ a.entry-name:hover { color: var(--orange-ink); }
 /* Cameras */
 .camera-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; list-style: none; margin: 0; padding: 0; }
 .camera-card { display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-panel); }
-.camera-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--video); }
-.camera-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.camera-thumb { position: relative; overflow: hidden; aspect-ratio: 16 / 9; background: var(--video); }
+.camera-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; } /* out of the flow: a tall picture would stretch the box */
+.camera-thumb-tall { aspect-ratio: 15 / 16; } /* an upright tablet: 60% of the height of its 9:16 picture */
+.camera-thumb-tall img { object-position: center bottom; } /* it looks up from below: the top is ceiling */
 .camera-thumb .glass { position: absolute; top: 10px; left: 10px; }
 .camera-thumb-empty { position: absolute; inset: 0; display: grid; place-items: center; color: #c9cdd4; font-size: 13px; }
 .camera-body { display: grid; gap: 10px; padding: 14px 16px 16px; }

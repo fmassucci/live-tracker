@@ -20,7 +20,7 @@
   {% set st = statuses.get(c.id | string) %}
   {% set state = states[c.id] %}
   <li class="camera-card">
-    <div class="camera-thumb">
+    <div class="camera-thumb{% if st.size | aspect | float < 1 %} camera-thumb-tall{% endif %}">
       {% if state in ("recording", "live") %}
       <img src="/cameras/{{ c.id }}/frame.jpg" data-refresh="/cameras/{{ c.id }}/frame.jpg" alt="{{ t('Image from {name}', name=c.name) }}">
       {% else %}

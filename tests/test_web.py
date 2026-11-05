@@ -964,3 +964,15 @@ def test_the_recognition_screen_runs_on_a_tablet_with_an_old_browser():
     script = (Path(kiosk.__file__).parent / "static" / "kiosk.js").read_text(encoding="utf-8")
     code = "\n".join(line.split("//")[0] for line in script.splitlines())
     assert "?." not in code and "??" not in code
+
+
+@pytest.mark.parametrize(("size", "tall"), [("720x1280", True), ("480x640", True), ("1920x1080", False)])
+def test_only_a_tall_picture_gets_a_tall_card(client, app, size, tall):
+    tablet, _ = _tablet_camera(app)
+
+    class Sending(NoVision):
+        def status(self):
+            return {"cameras": {str(tablet): {"online": True, "size": size, "fps": 6, "state": "idle"}}}
+
+    app.state.services.vision = Sending()
+    assert ("camera-thumb-tall" in client.get("/cameras").text) is tall
