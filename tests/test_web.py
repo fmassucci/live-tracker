@@ -4,6 +4,7 @@ import threading
 import zipfile
 from dataclasses import replace
 from datetime import date, datetime, time
+from pathlib import Path
 from types import SimpleNamespace
 
 import cv2
@@ -19,6 +20,7 @@ from live_tracker.db import (
 from live_tracker.devices.tuya import CloudDevice, CloudOutput
 from live_tracker.events import face_path
 from live_tracker.users import authenticate, create_user, is_admin, user_exists
+from live_tracker.web import kiosk
 from live_tracker.web.app import create_app
 from live_tracker.web.common import recording_state
 
@@ -37,6 +39,20 @@ class NoVision:
 
     def stream(self, channel):
         return None
+
+    def send_frame(self, channel, jpeg):
+        return False
+
+
+class TakesPictures(NoVision):
+    """A recognition service with a camera that takes every picture it's handed."""
+
+    def __init__(self):
+        self.taken = []
+
+    def send_frame(self, channel, jpeg):
+        self.taken.append((channel, jpeg))
+        return True
 
 
 @pytest.fixture
@@ -668,6 +684,133 @@ def test_the_recognition_screen_needs_its_secret_address(client, app):
     assert state["tone"] == "bad"  # the recognition service isn't running in tests
 
 
+def _tablet_camera(app) -> tuple[int, str]:
+    """A camera a browser films for, and the recognition screen's key."""
+    with app.state.services.db.session() as session:
+        camera = Camera(name="Portaria", url="browser://ab12", analysis="faces")
+        session.add(camera)
+        session.flush()
+        return camera.id, get_setting(session, "screen_key")
+
+
+def test_the_recognition_screen_films_with_the_tablet_only_on_a_camera_it_films_for(client, app):
+    tablet, key = _tablet_camera(app)
+    with app.state.services.db.session() as session:
+        ip_camera = Camera(name="Pátio", url="rtsp://cam/1", analysis="faces")
+        session.add(ip_camera)
+    own = client.get(f"/screen?camera={tablet}&key={key}").text
+    other = client.get(f"/screen?camera={ip_camera.id}&key={key}").text
+    assert "<video" in own and f"/screen/frame?camera={tablet}&amp;key={key}" not in other
+    assert f'data-frame-url="/screen/frame?camera={tablet}&key={key}"' in own and "/screen/stream" not in own
+    assert "<video" not in other and "/screen/stream" in other
+
+
+def test_a_tablet_filming_moves_to_the_https_port_where_browsers_allow_the_camera(client, app):
+    tablet, key = _tablet_camera(app)
+    app.state.services.cfg.web.https_port = 8443
+    address = f"/screen?camera={tablet}&key={key}"
+    moved = client.get(f"http://192.168.0.19:8000{address}", follow_redirects=False)
+    assert moved.status_code == 307 and moved.headers["location"] == f"https://192.168.0.19:8443{address}"
+    assert client.get(f"https://192.168.0.19:8443{address}").status_code == 200  # already there
+    assert client.get(f"http://127.0.0.1:8000{address}").status_code == 200  # this computer needs no https
+    assert client.get(f"http://192.168.0.19:8000{address.replace(key, 'wrong')}").status_code == 404
+
+
+def test_a_screen_beside_an_ip_camera_stays_where_it_is(client, app):
+    _, key = _tablet_camera(app)
+    with app.state.services.db.session() as session:
+        camera = Camera(name="Pátio", url="rtsp://cam/1", analysis="faces")
+        session.add(camera)
+    app.state.services.cfg.web.https_port = 8443
+    assert client.get(f"http://192.168.0.19:8000/screen?camera={camera.id}&key={key}",
+                      follow_redirects=False).status_code == 200
+
+
+def test_the_tablet_stays_on_plain_http_when_the_https_port_is_off(client, app):
+    tablet, key = _tablet_camera(app)
+    assert client.get(f"http://192.168.0.19:8000/screen?camera={tablet}&key={key}",
+                      follow_redirects=False).status_code == 200
+
+
+def test_the_tablet_sends_pictures_with_the_screens_secret_address(app):
+    tablet, key = _tablet_camera(app)
+    app.state.services.vision = vision = TakesPictures()
+    with TestClient(app) as anonymous:  # a tablet doesn't sign in
+        assert anonymous.post(f"/screen/frame?camera={tablet}&key=wrong", content=b"picture").status_code == 404
+        assert vision.taken == []
+        assert anonymous.post(f"/screen/frame?camera={tablet}&key={key}", content=b"picture").status_code == 204
+    assert vision.taken == [(f"cam{tablet}", b"picture")]
+
+
+def test_a_picture_too_large_is_refused_before_it_reaches_the_service(client, app):
+    tablet, key = _tablet_camera(app)
+    app.state.services.vision = vision = TakesPictures()
+    too_large = b"x" * (kiosk.MAX_FRAME_BYTES + 1)
+    assert client.post(f"/screen/frame?camera={tablet}&key={key}", content=too_large).status_code == 413
+    assert vision.taken == []
+
+
+def test_the_tablet_hears_when_the_service_takes_no_picture(client, app):
+    tablet, key = _tablet_camera(app)
+    assert client.post(f"/screen/frame?camera={tablet}&key={key}", content=b"picture").status_code == 503
+
+
+def test_a_camera_can_film_with_the_tablet_without_a_video_address(client, app, monkeypatch):
+    monkeypatch.setattr("live_tracker.web.common.local_ipv4", lambda: ["192.168.0.19"])
+    place_model_file(app.state.services.cfg.paths.models_dir, monkeypatch, "yunet")
+    data = {"name": "Portaria Externa", "source": "browser", "analysis": ""}
+    assert client.post("/cameras/new", data=data).status_code == 200
+    with app.state.services.db.session() as session:
+        camera = session.scalars(select(Camera)).one()
+        key = get_setting(session, "screen_key")
+    assert camera.url.startswith("browser://")
+
+    edit = client.get(f"/cameras/{camera.id}").text
+    assert f'value="http://192.168.0.19:8000/screen?camera={camera.id}&key={key}"' in edit
+    assert 'value="browser" checked' in edit
+    assert camera.url not in edit
+
+    client.post(f"/cameras/{camera.id}", data={**data, "name": "Portaria"})
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, camera.id).url == camera.url  # the tablet's address stays the same
+
+
+def test_a_camera_going_back_to_a_video_address_needs_one(client, app):
+    tablet, _ = _tablet_camera(app)
+    data = {"name": "Portaria", "source": "address", "analysis": ""}
+    assert client.post(f"/cameras/{tablet}", data={**data, "url": ""}).status_code == 400
+    client.post(f"/cameras/{tablet}", data={**data, "url": "rtsp://cam/1"})
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, tablet).url == "rtsp://cam/1"
+
+
+def test_a_camera_needs_its_address_unless_the_tablet_films(client):
+    response = client.post("/cameras/new", data={"name": "Pátio", "source": "address", "analysis": ""})
+    assert response.status_code == 400
+
+
+def test_a_tablet_held_upright_is_not_taken_for_two_lenses(client, app):
+    tablet, _ = _tablet_camera(app)
+
+    class Upright(NoVision):
+        def status(self):
+            return {"cameras": {str(tablet): {"online": True, "size": "720x1280", "fps": 6}}}
+
+    app.state.services.vision = Upright()
+    assert "/split" not in client.get(f"/cameras/{tablet}").text
+
+
+def test_the_cameras_page_says_how_to_start_a_camera_the_tablet_films_for(client, app):
+    _tablet_camera(app)
+
+    class Running(NoVision):
+        def status(self):
+            return {"cameras": {}}
+
+    app.state.services.vision = Running()
+    assert "abra o endereço dela no tablet" in client.get("/cameras").text
+
+
 TUYA_MODULE = CloudDevice(uid="eb2002", name="Módulo Mini Ms-107 2 Canais Wi-Fi", model="MS-107 2C WF",
                           local_key="chave-local-1234", outputs=(CloudOutput("1", 1, 9), CloudOutput("2", 2, 10)),
                           online=True, power_on="on")
@@ -814,3 +957,10 @@ def test_removing_a_device_needs_the_confirmation(app, client):
     client.post(f"/devices/{device.id}/delete", data={"confirm": "true"})
     with app.state.services.db.session() as session:
         assert session.get(Device, device.id) is None and session.scalars(select(DeviceOutput)).all() == []
+
+
+def test_the_recognition_screen_runs_on_a_tablet_with_an_old_browser():
+    """Chrome 74, on Android 5.1, refuses a whole file for one ?. or ??, and the page then just stays black."""
+    script = (Path(kiosk.__file__).parent / "static" / "kiosk.js").read_text(encoding="utf-8")
+    code = "\n".join(line.split("//")[0] for line in script.splitlines())
+    assert "?." not in code and "??" not in code

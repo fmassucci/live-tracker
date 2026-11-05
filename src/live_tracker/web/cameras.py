@@ -13,8 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from live_tracker import onvif
-from live_tracker.camera import crop, probe, redact
-from live_tracker.db import CAMERAS_VERSION, Camera, Device, audit, bump
+from live_tracker.camera import crop, is_browser, new_browser_source, probe, redact
+from live_tracker.db import CAMERAS_VERSION, Camera, Device, audit, bump, get_setting
 from live_tracker.falls import FallSettings
 from live_tracker.fire import NAMES as FIRE_NAMES
 from live_tracker.fire import FireSettings
@@ -23,7 +23,8 @@ from live_tracker.models import CATALOG, file_state, files_of, model_state
 from live_tracker.objects import COMMON, DETECTORS, GROUPS, NAMES, SENSITIVITY, ObjectSettings
 from live_tracker.recording import APPEAR, DAILY, DEFAULT_EVERY_S, INTERVAL, MAX_EVERY_S, MIN_EVERY_S, MODES
 from live_tracker.web.common import (
-    KINDS, RECORDING_STATES, flash, fragment, page, recording_state, require_user, safe_next, services, translator,
+    KINDS, RECORDING_STATES, flash, fragment, page, recording_state, require_user, safe_next, services, tablet_address,
+    translator,
 )
 
 router = APIRouter(dependencies=[Depends(require_user)])
@@ -44,6 +45,7 @@ RECORD_HINTS = {APPEAR: "One photo when it appears. The next one only after it l
 UNITS = {"s": 1, "min": 60, "h": 3600}
 UNIT_NAMES = {"s": "seconds", "min": "minutes", "h": "hours"}
 PARTS = {"top": "Top half", "bottom": "Bottom half", "": "Whole picture"}  # see Camera.part
+FILMS_ITSELF = "browser"  # the tablet or phone showing the recognition screen films with its own camera
 MJPEG = "multipart/x-mixed-replace; boundary=frame"
 
 
@@ -74,13 +76,13 @@ def camera_list(request: Request) -> HTMLResponse:
     outputs = {o["id"]: f"{d['name']}, {o['name']}" for d in _device_outputs(request) for o in d["outputs"]}
     return page(request, "cameras.html", section="cameras", cameras=cameras, statuses=statuses, states=states,
                 service_up=status is not None, analyses=ANALYSIS_NAMES, rules={c.id: _rule(t, c) for c in cameras},
-                outputs=outputs)
+                outputs=outputs, own_cameras={c.id for c in cameras if is_browser(c.url)})
 
 
 @router.get("/cameras/new", response_class=HTMLResponse)
 def camera_new(request: Request) -> HTMLResponse:
     analyses = _analyses(request)
-    form = {"analysis": "faces" if "faces" in analyses else "", "record_mode": APPEAR,
+    form = {"source": "address", "analysis": "faces" if "faces" in analyses else "", "record_mode": APPEAR,
             "record_while_present": True, **_every_fields(DEFAULT_EVERY_S)}
     return page(request, "camera_form.html", section="cameras", camera=None, form=form, objects=ObjectSettings(),
                 **_other_settings(), error="", **_choices(request, analyses))
@@ -88,21 +90,22 @@ def camera_new(request: Request) -> HTMLResponse:
 
 @router.post("/cameras/new", response_model=None)
 def camera_create(
-    request: Request, name: str = Form(""), url: str = Form(""), analysis: str = Form(""), output_id: str = Form(""),
-    kinds: list[str] = Form([]), confidence: float = Form(0.5),
+    request: Request, name: str = Form(""), source: str = Form("address"), url: str = Form(""),
+    analysis: str = Form(""), output_id: str = Form(""), kinds: list[str] = Form([]), confidence: float = Form(0.5),
     min_seconds: float = Form(2.0), fps: float = Form(4.0), objects_model: str = Form(""),
     record_mode: str = Form(APPEAR), every_value: str = Form(""), every_unit: str = Form("min"),
     record_while_present: bool = Form(False), others: dict[str, ObjectSettings] = Depends(_sent_settings),
 ) -> HTMLResponse | RedirectResponse:
     analyses = _analyses(request)
+    address = _address(source, url)
     objects = ObjectSettings.of({"kinds": kinds, "confidence": confidence, "min_seconds": min_seconds, "fps": fps,
                                  "model": objects_model})
     every_s = _every_s(every_value, every_unit)
     output, output_error = _device_output(request, analysis, output_id)
-    error = (_camera_error(name, url, analysis in analyses) or output_error or _objects_error(analysis, kinds)
+    error = (_camera_error(name, address, analysis in analyses) or output_error or _objects_error(analysis, kinds)
              or _fire_error(analysis, others) or _record_error(record_mode, every_s))
     if error:
-        form = {"name": name, "url": url, "analysis": analysis, "output_id": output,
+        form = {"name": name, "source": source, "url": url, "analysis": analysis, "output_id": output,
                 "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
                 "record_while_present": record_while_present}
         return page(request, "camera_form.html", section="cameras", camera=None, form=form,
@@ -110,7 +113,7 @@ def camera_create(
                     **_choices(request, analyses))
     settings = objects if analysis == "objects" else others.get(analysis)
     with services(request).db.session() as session:
-        camera = Camera(name=name.strip(), url=url.strip(), analysis=analysis, output_id=output,
+        camera = Camera(name=name.strip(), url=address.strip(), analysis=analysis, output_id=output,
                         model_settings=settings.dumps() if settings else "{}",
                         record_mode=record_mode, record_every_s=every_s or DEFAULT_EVERY_S,
                         record_while_present=record_while_present, enabled=True)  # starts recording right away
@@ -125,7 +128,8 @@ def camera_create(
 def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
-    form = {"name": camera.name, "url": redact(camera.url), "analysis": camera.analysis,
+    form = {"name": camera.name, "source": FILMS_ITSELF if is_browser(camera.url) else "address",
+            "url": _shown_address(camera.url), "analysis": camera.analysis,
             "output_id": camera.output_id, "part": camera.part, "record_mode": camera.record_mode,
             "record_while_present": camera.record_while_present, **_every_fields(camera.record_every_s)}
     return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
@@ -135,8 +139,8 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
 
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
-    request: Request, camera_id: int, name: str = Form(""), url: str = Form(""), analysis: str = Form(""),
-    output_id: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
+    request: Request, camera_id: int, name: str = Form(""), source: str = Form("address"), url: str = Form(""),
+    analysis: str = Form(""), output_id: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
     confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
     objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
     every_unit: str = Form("min"), record_while_present: bool = Form(False),
@@ -148,20 +152,21 @@ def camera_update(
     output, output_error = _device_output(request, analysis, output_id)
     with services(request).db.session() as session:
         camera = _get(session, camera_id)
-        url = _keep_password(camera, url)
+        address = _address(source, _keep_password(camera, url), camera.url)
         part = camera.part if part not in PARTS else part  # the choice is only shown for a camera already split
         analyses = _analyses(request, camera.analysis)
-        error = (_camera_error(name, url, analysis in analyses) or output_error
+        error = (_camera_error(name, address, analysis in analyses) or output_error
                  or _objects_error(analysis, kinds) or _fire_error(analysis, others)
                  or _record_error(record_mode, every_s))
         if error:
-            form = {"name": name, "url": redact(url), "analysis": analysis, "output_id": output,
+            form = {"name": name, "source": source, "url": _shown_address(address), "analysis": analysis,
+                    "output_id": output,
                     "part": part, "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
                     "record_while_present": record_while_present}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                         objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                         **_live(request, camera), **_choices(request, analyses))
-        camera.name, camera.url, camera.part = name.strip(), url.strip(), part
+        camera.name, camera.url, camera.part = name.strip(), address.strip(), part
         camera.analysis, camera.output_id = analysis, output
         camera.record_mode, camera.record_every_s = record_mode, every_s or camera.record_every_s
         camera.record_while_present = record_while_present
@@ -325,6 +330,18 @@ def camera_stream(request: Request, camera_id: int) -> Response:
     return StreamingResponse(chunks, media_type=MJPEG, headers={"Cache-Control": "no-store"})
 
 
+def _address(source: str, url: str, current: str = "") -> str:
+    """The camera's address: the one written in the form or, when the tablet films by itself, one it keeps."""
+    if source != FILMS_ITSELF:
+        return url
+    return current if is_browser(current) else new_browser_source()
+
+
+def _shown_address(url: str) -> str:
+    """The address in the form: without its password, and empty when there's none to write."""
+    return "" if is_browser(url) else redact(url)
+
+
 def _get(session, camera_id: int) -> Camera:
     camera = session.get(Camera, camera_id)
     if camera is None:
@@ -420,10 +437,15 @@ def _as_ticked(objects: ObjectSettings, kinds: list[str]) -> ObjectSettings:
 
 def _live(request: Request, camera: Camera) -> dict[str, object]:
     """The camera's picture beside its settings, and how it is doing, as the recognition service sees it."""
-    status = services(request).vision.status()
+    s = services(request)
+    status = s.vision.status()
     camera_status = status.get("cameras", {}).get(str(camera.id)) if status else None
+    with s.db.session() as session:
+        key = get_setting(session, "screen_key")
+    films_itself = is_browser(camera.url)  # a tablet held upright sends a tall picture too, of one lens
     return {"state": recording_state(camera, camera_status, status is not None), "camera_status": camera_status or {},
-            "two_lenses": not camera.part and _taller_than_wide(camera_status)}
+            "two_lenses": not camera.part and not films_itself and _taller_than_wide(camera_status),
+            "films_itself": films_itself, "screen_key": key, "screen_base_url": tablet_address(request)}
 
 
 def _choices(request: Request, analyses: dict[str, tuple[str, bool]]) -> dict[str, object]:

@@ -23,10 +23,31 @@
         <label for="name">{{ t("Name") }}</label>
         <input type="text" id="name" name="name" value="{{ form.name or '' }}" required maxlength="80" placeholder="{{ t('Staff entrance') }}">
       </div>
-      <div class="field">
+      <fieldset class="field">
+        <legend>{{ t("Source") }}</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="source" value="address" {% if form.source != "browser" %}checked{% endif %}>{{ t("Video address") }}</label>
+          <label class="choice"><input type="radio" name="source" value="browser" {% if form.source == "browser" %}checked{% endif %}>{{ t("The tablet's own camera") }}</label>
+        </div>
+        {% if not films_itself %}
+        <span class="hint only-own-camera">{{ t("A tablet or phone films with its front camera and shows the recognition screen itself, with nothing to install. After saving, its address appears here.") }}</span>
+        {% endif %}
+      </fieldset>
+      {% if films_itself %}
+      <div class="field only-own-camera">
+        <label for="screen-address">{{ t("Open this address on the tablet") }}</label>
+        <div class="copy-field">
+          <input type="text" id="screen-address" value="{{ screen_base_url }}/screen?camera={{ camera.id }}&key={{ screen_key }}" readonly>
+          <button type="button" class="button button-quiet" data-copy="screen-address" data-copied="{{ t('Copied') }}" aria-label="{{ t('Copy') }}">{{ icon("copy") }}<span class="copy-label">{{ t("Copy") }}</span></button>
+          <a class="button button-quiet" href="/screen?camera={{ camera.id }}&key={{ screen_key }}" target="_blank" rel="noopener" aria-label="{{ t('Open') }}">{{ icon("external") }}<span class="copy-label">{{ t("Open") }}</span></a>
+        </div>
+        <span class="hint">{{ t("The camera films only while this address stays open on the tablet. Anyone with it can send pictures as this camera, so keep it private.") }}</span>
+      </div>
+      {% endif %}
+      <div class="field only-address">
         <label for="url">{{ t("Video address") }}</label>
         <div class="address-row">
-          <input type="text" id="url" name="url" value="{{ form.url or '' }}" required spellcheck="false" autocomplete="off">
+          <input type="text" id="url" name="url" value="{{ form.url or '' }}" spellcheck="false" autocomplete="off">
           <button class="button button-quiet" type="button" hx-post="/cameras-test" hx-target="#test-result" hx-indicator="this">{{ t("Test connection") }}</button>
         </div>
         {% if camera %}<span class="hint">{{ t("The password is hidden. Leave the address as it is to keep it.") }}</span>{% endif %}

@@ -11,7 +11,17 @@
 <body class="kiosk" data-tone="idle"
       data-state-url="/screen/state?camera={{ camera }}&key={{ key }}&lang={{ lang }}"
       data-offline-title="{{ t('The recognition system is not working') }}"
-      data-offline-detail="{{ t('Use your key and tell the manager.') }}">
+      data-offline-detail="{{ t('Use your key and tell the manager.') }}"
+      {% if own_camera %}
+      data-frame-url="/screen/frame?camera={{ camera }}&key={{ key }}"
+      data-starting="{{ t('Starting the camera...') }}"
+      data-blocked-title="{{ t('The browser blocks the camera on this address') }}"
+      data-blocked-detail="{{ t('Browsers only allow it over https. Turn on [web] https_port in config.toml.') }}"
+      data-denied-title="{{ t('Allow the camera') }}"
+      data-denied-detail="{{ t('Let this page use the camera in the browser, then reload it.') }}"
+      data-failed-title="{{ t('The camera did not start') }}"
+      data-failed-detail="{{ t('Close any other app using it. Trying again...') }}"
+      {% endif %}>
 <header class="kiosk-top">
   <div class="kiosk-brand">
     {% if brand.logo %}<img src="{{ brand.logo }}" alt="">{% else %}<span class="brand-mark">{{ icon("brand") }}</span>{% endif %}
@@ -21,7 +31,11 @@
 </header>
 <main class="kiosk-body">
   <div class="kiosk-frame">
+    {% if own_camera %}
+    <video autoplay muted playsinline aria-label="{{ t('You, as the camera sees you') }}"></video>
+    {% else %}
     <img src="/screen/stream?camera={{ camera }}&key={{ key }}" alt="{{ t('You, as the camera sees you') }}">
+    {% endif %}
   </div>
   <div aria-live="polite">
     {{ icon("brand", "kiosk-state kiosk-state-idle") }}

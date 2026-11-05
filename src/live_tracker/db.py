@@ -46,7 +46,8 @@ class Camera(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
-    url: Mapped[str] = mapped_column(String(500))  # RTSP URL (with password), video file, or webcam index
+    # RTSP URL (with password), video file or webcam index; browser://... when a browser films for it (camera.py)
+    url: Mapped[str] = mapped_column(String(500))
     # What runs on the camera's picture, and what the camera drives. Every camera records with its analysis.
     analysis: Mapped[str] = mapped_column(String(20), default="faces", server_default="faces")  # face recognition
     # The device output it switches when it recognizes someone with access, such as a Tuya module's channel, for

@@ -1,7 +1,8 @@
-"""The recognition screen: a full-screen page for a tablet beside a face camera.
+"""The recognition screen: a full-screen page for a tablet beside a face camera, or that films with its own.
 
 It needs no sign-in, only the secret address from Settings, and shows first names only: anyone at the
-camera can read it.
+camera can read it. On a camera a browser films for, the page shows the device's own camera and sends its pictures
+here, which go on to the recognition service like any camera's: the same address that shows the screen feeds it.
 """
 
 from __future__ import annotations
@@ -9,8 +10,10 @@ from __future__ import annotations
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
+from live_tracker.camera import is_browser
 from live_tracker.db import Camera, Person, get_setting
 from live_tracker.faces import BLURRY, TOO_SMALL, TURNED_AWAY
 from live_tracker.i18n import Translator
@@ -25,15 +28,21 @@ ADJUST = {
     BLURRY: "Hold still for a moment",
     FROZEN: "One moment",
 }
+MAX_FRAME_BYTES = 2_000_000  # far more than one picture from a tablet takes
+THIS_COMPUTER = ("127.0.0.1", "localhost")  # browsers allow the camera here over plain http too
 
 
 @router.get("/screen", response_class=HTMLResponse)
-def recognition_screen(request: Request, camera: int, key: str, lang: str = "") -> HTMLResponse:
+def recognition_screen(request: Request, camera: int, key: str, lang: str = "") -> Response:
     s = services(request)
-    name = _check(request, camera, key)
+    row = _check(request, camera, key)
+    https_port = s.cfg.web.https_port
+    if is_browser(row.url) and https_port and request.url.scheme == "http" and request.url.hostname not in THIS_COMPUTER:
+        return RedirectResponse(str(request.url.replace(scheme="https", port=https_port)), status_code=307)
     t = Translator(lang or s.cfg.web.language)
     return s.templates.TemplateResponse(request, "kiosk.html", {
-        "t": t, "lang": t.language, "brand": branding(s), "camera": camera, "camera_name": name, "key": key,
+        "t": t, "lang": t.language, "brand": branding(s), "camera": camera, "camera_name": row.name, "key": key,
+        "own_camera": is_browser(row.url),
     })
 
 
@@ -67,14 +76,29 @@ def screen_stream(request: Request, camera: int, key: str) -> Response:
     return StreamingResponse(chunks, media_type="multipart/x-mixed-replace; boundary=frame")
 
 
-def _check(request: Request, camera_id: int, key: str) -> str:
-    """The camera's name, if the address is valid."""
+@router.post("/screen/frame")
+async def screen_frame(request: Request, camera: int, key: str) -> Response:
+    """A picture from the page's own camera. The recognition service refuses it unless a browser films for this
+    camera, so the address can't stand in for an IP camera's picture."""
+    await run_in_threadpool(_check, request, camera, key)
+    jpeg = b""
+    async for chunk in request.stream():
+        jpeg += chunk
+        if len(jpeg) > MAX_FRAME_BYTES:
+            raise HTTPException(413)
+    if not await run_in_threadpool(services(request).vision.send_frame, f"cam{camera}", jpeg):
+        raise HTTPException(503)
+    return Response(status_code=204)
+
+
+def _check(request: Request, camera_id: int, key: str) -> Camera:
+    """The camera, if the address is valid."""
     with services(request).db.session() as session:
         expected = get_setting(session, "screen_key") or ""
         camera = session.get(Camera, camera_id)
         if not expected or not secrets.compare_digest(key, expected) or camera is None:
             raise HTTPException(404)
-        return camera.name
+        return camera
 
 
 def _access_text(request: Request, status: dict, t: Translator) -> str:

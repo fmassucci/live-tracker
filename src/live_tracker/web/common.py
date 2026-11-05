@@ -22,7 +22,7 @@ from live_tracker.people import People
 from live_tracker.users import is_admin, user_exists
 from live_tracker.web.vision_client import VisionClient
 
-ASSET_VERSION = "42"  # bump to make browsers reload the stylesheet, scripts and icons
+ASSET_VERSION = "44"  # bump to make browsers reload the stylesheet, scripts and icons
 NOT_AN_IMAGE = "not an image"
 IMAGE_CACHE_CONTROL = "private, max-age=86400"  # photos and snapshots never change once saved
 
@@ -212,6 +212,12 @@ def web_addresses(cfg: Config) -> tuple[str, list[str]]:
     url = f"http://{host}:{port}"
     local_only = host.startswith("127.") or host == "localhost"
     return url, [] if local_only else [url]
+
+
+def tablet_address(request: Request) -> str:
+    """The address a tablet on the network opens the system at."""
+    _, others = web_addresses(services(request).cfg)
+    return others[0] if others else str(request.base_url).rstrip("/")
 
 
 def on_this_computer(request: Request) -> bool:

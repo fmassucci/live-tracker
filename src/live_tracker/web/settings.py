@@ -21,7 +21,7 @@ from starlette.background import BackgroundTask
 from live_tracker.db import STOP_REQUESTS, Camera, User, audit, bump, get_setting, set_setting
 from live_tracker.users import AccountError, create_user, is_admin, remove_user, rename_user, set_admin, set_password
 from live_tracker.web.common import (
-    flash, on_this_computer, page, require_admin, require_user, services, web_addresses,
+    flash, on_this_computer, page, require_admin, require_user, services, tablet_address, web_addresses,
 )
 from live_tracker.web.data import summary
 from live_tracker.web.vision_client import VisionClient
@@ -45,9 +45,8 @@ def settings_page(request: Request) -> HTMLResponse:
         users = session.scalars(select(User).order_by(User.username != me, User.username)).all()  # yours first
         admin_signed_in = is_admin(session, me)
     here, others = web_addresses(s.cfg)
-    screen_base_url = others[0] if others else str(request.base_url).rstrip("/")  # the address the tablet opens
     return page(request, "settings.html", section="settings", display_name=display_name, screen_key=screen_key,
-                screen_cameras=screen_cameras, users=users, cfg=s.cfg, screen_base_url=screen_base_url,
+                screen_cameras=screen_cameras, users=users, cfg=s.cfg, screen_base_url=tablet_address(request),
                 here_address=here, network_addresses=others, is_admin=admin_signed_in,
                 data_folder=s.cfg.paths.data_dir.resolve(), on_this_computer=on_this_computer(request),
                 summary=summary(request) if admin_signed_in else None, dated=False)

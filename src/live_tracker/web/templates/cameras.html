@@ -36,7 +36,9 @@
         {% if c.output_id in outputs %}<span>{{ t("Switches {output}", output=outputs[c.output_id]) }}</span>{% endif %}
         {% if state in ("recording", "live", "no-model") %}<span>{{ st.size }}, {{ t("{fps} fps", fps=t.number(st.fps, 0)) }}</span>{% endif %}
       </div>
-      {% if state == "no-image" %}
+      {% if state == "no-image" and c.id in own_cameras %}
+      <p class="small muted">{{ t("Nothing is filming: open its address on the tablet, under Edit.") }}</p>
+      {% elif state == "no-image" %}
       <p class="small muted">{{ t("Check the camera's power, network and address.") }}</p>
       {% elif state == "no-model" %}
       <p class="small muted">{{ t("Its AI model isn't downloaded.") }} <a href="/settings/models">{{ t("Download it in Settings") }}</a></p>
