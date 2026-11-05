@@ -46,7 +46,7 @@ class FakeSource:
 
 
 def test_a_camera_runs_the_model_its_settings_chose(cfg, monkeypatch):
-    monkeypatch.setattr(service, "PreviewServer", lambda host, port: None)
+    monkeypatch.setattr(service, "PreviewServer", lambda host, port, receive: None)
     vision = VisionService(cfg)
     made = []
     monkeypatch.setattr(vision, "make_detector", lambda: made.append("yolox") or object())

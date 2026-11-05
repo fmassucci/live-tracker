@@ -17,7 +17,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from live_tracker.camera import Camera, Frame, part_of
+from live_tracker.camera import Camera, Frame, PushedCamera, is_browser, part_of
 from live_tracker.config import Config
 from live_tracker.db import (
     CAMERAS_VERSION, DEVICES_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting,
@@ -84,7 +84,7 @@ class CameraWorker:
     A camera whose model isn't downloaded keeps sending its picture, and says so in its status.
     """
 
-    def __init__(self, spec: CameraSpec, service: VisionService, source: Camera) -> None:
+    def __init__(self, spec: CameraSpec, service: VisionService, source: Camera | PushedCamera) -> None:
         self.spec = spec
         self._service = service
         self._camera = source
@@ -183,7 +183,7 @@ class VisionService:
         self.source = source  # a single camera to use instead of the database's, for tests
         self.db = Database(cfg.db_path)
         self.db.migrate()
-        self.preview = PreviewServer(cfg.preview.host, cfg.preview.port)
+        self.preview = PreviewServer(cfg.preview.host, cfg.preview.port, self.receive_frame)
         self.gallery = Gallery(cfg.recognition.model, [], [])
         self._translate = Translator(cfg.web.language)
         self._liveness = load_liveness(cfg.paths.models_dir, cfg.liveness.threshold)
@@ -192,7 +192,7 @@ class VisionService:
         self._switch = make_switch(cfg.devices.mode, self.devices)
         self._with_access: set[str] = set()
         self._workers: dict[int | None, CameraWorker] = {}
-        self._sources: dict[str, Camera] = {}  # by address: the cameras cut from one picture share it
+        self._sources: dict[str, Camera | PushedCamera] = {}  # by address: the cameras cut from one picture share it
         self._versions: dict[str, str | None] = {}
         self._stop = threading.Event()
 
@@ -252,6 +252,13 @@ class VisionService:
 
     def stop(self) -> None:
         self._stop.set()
+
+    def receive_frame(self, channel: str, jpeg: bytes) -> bool:
+        """Called from the local port's threads with a picture a browser took. False unless a running camera on
+        that channel is one a browser films for: nothing can stand in for the picture of an IP camera."""
+        url = next((w.spec.url for w in list(self._workers.values()) if w.spec.channel == channel), "")
+        source = self._sources.get(url)
+        return isinstance(source, PushedCamera) and source.push(jpeg)
 
     def last_recorded(self, spec: CameraSpec, rule: RecordRule) -> dict[str, datetime]:
         """The camera's last photo of each person and kind of thing that its rule still counts."""
@@ -374,13 +381,17 @@ class VisionService:
         for key, spec in wanted.items():
             if key not in self._workers:
                 if spec.url not in self._sources:
-                    reconnect_s = self.cfg.camera.reconnect_delay_s
-                    self._sources[spec.url] = Camera(spec.url, reconnect_s, loop=self.source is None).start()
+                    self._sources[spec.url] = self._open(spec.url)
                 self._workers[key] = CameraWorker(spec, self, self._sources[spec.url])
                 self._workers[key].start()
                 log.info("camera %s started%s", spec.name, " (switches a device)" if spec.output_id else "")
         if not self._workers:
             log.warning("no cameras: add one in the web UI (Cameras)")
+
+    def _open(self, url: str) -> Camera | PushedCamera:
+        if is_browser(url):
+            return PushedCamera().start()
+        return Camera(url, self.cfg.camera.reconnect_delay_s, loop=self.source is None).start()
 
     def _status(self) -> dict:
         return {

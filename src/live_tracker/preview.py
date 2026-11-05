@@ -6,6 +6,8 @@ Frames are kept as they arrive and only JPEG-encoded when someone asks for them.
     /status.json        cameras, states and counters
     /<channel>.jpg      latest frame
     /<channel>.mjpg     live MJPEG stream
+
+The web UI also hands over, as POST /<channel>.jpg, the pictures a browser takes for a camera it films for.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import logging
 import re
 import sys
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
@@ -23,6 +26,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 _FRAME_PATH = re.compile(r"^/([\w-]+)\.(jpg|mjpg)$")
+_LOOPBACK = ("127.0.0.1", "::1")  # a picture received can switch a device: only the web UI, on this computer, sends
 
 
 class _HTTPServer(ThreadingHTTPServer):
@@ -32,7 +36,8 @@ class _HTTPServer(ThreadingHTTPServer):
 
 
 class PreviewServer:
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, receive: Callable[[str, bytes], bool] = lambda channel, jpeg: False) -> None:
+        self.receive = receive  # (channel, JPEG) -> whether a camera there took the picture
         self._cond = threading.Condition()
         self._frames: dict[str, tuple[int, np.ndarray]] = {}
         self._jpegs: dict[str, tuple[int, bytes]] = {}
@@ -112,6 +117,16 @@ def _handler(server: PreviewServer) -> type[BaseHTTPRequestHandler]:
                     self.send_error(404, "no such camera, or no frame yet")
             else:
                 self._stream(match.group(1))
+
+        def do_POST(self) -> None:
+            match = _FRAME_PATH.match(self.path)
+            if self.client_address[0] not in _LOOPBACK or not match or match.group(2) != "jpg":
+                self.send_error(404)
+            elif server.receive(match.group(1), self.rfile.read(int(self.headers.get("Content-Length") or 0))):
+                self.send_response(204)
+                self.end_headers()
+            else:
+                self.send_error(404, "no camera taking pictures there")
 
         def _reply(self, body: bytes, content_type: str) -> None:
             self.send_response(200)

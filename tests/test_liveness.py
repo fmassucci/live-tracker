@@ -51,7 +51,7 @@ def test_a_face_judged_a_photo_is_decided_as_one_and_named_on_the_picture(cfg):
 
 
 def test_face_cameras_start_checking_once_the_model_is_downloaded(cfg, monkeypatch):
-    monkeypatch.setattr(service, "PreviewServer", lambda host, port: None)
+    monkeypatch.setattr(service, "PreviewServer", lambda host, port, receive: None)
     vision = VisionService(cfg)
     recognizer = Recognizer(cfg, FakeDetector(), FakeEmbedder("auraface"), vision.gallery, vision._liveness)
     vision._workers = {1: SimpleNamespace(analyzer=recognizer, status={}), 2: SimpleNamespace(analyzer=None, status={})}

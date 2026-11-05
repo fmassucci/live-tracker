@@ -1,20 +1,23 @@
 import time
 from datetime import datetime, timedelta
 
+import cv2
 import numpy as np
 import pytest
 from sqlalchemy import select
 
 from live_tracker import service, switching
-from live_tracker.camera import Frame
+from live_tracker.camera import Frame, PushedCamera
 from live_tracker.db import MODELS_VERSION, STOP_REQUESTS, Event, bump
 from live_tracker.db import Camera as CameraRow
 from live_tracker.decision import Decision
 from live_tracker.devices import OFFLINE, DeviceError
 from live_tracker.pipeline import Result
 from live_tracker.objects import ObjectAnalyzer, Sighting
+from live_tracker.preview import PreviewServer
 from live_tracker.recording import DAILY, INTERVAL, RecordGate, RecordRule, thing
 from live_tracker.service import CameraSpec, VisionService
+from live_tracker.web.vision_client import VisionClient
 
 
 class FakeSource:
@@ -59,7 +62,7 @@ class FakeDevices:
 
 def _vision(cfg, monkeypatch) -> VisionService:
     """The service without its preview port or the face models."""
-    monkeypatch.setattr(service, "PreviewServer", lambda host, port: None)
+    monkeypatch.setattr(service, "PreviewServer", lambda host, port, receive: None)
     vision = VisionService(cfg)
     monkeypatch.setattr(vision, "make_recognizer", lambda: None)
     return vision
@@ -260,3 +263,63 @@ def test_a_camera_runs_the_model_it_was_given(cfg, monkeypatch):
     worker = service.CameraWorker(spec, vision, FakeSource(spec.url))
     assert isinstance(worker.analyzer, ObjectAnalyzer) and not worker.model_missing
     assert service.CameraWorker(CameraSpec(2, "Sala", "0", analysis=""), vision, FakeSource("0")).analyzer is None
+
+
+class FakePreview:
+    def __init__(self) -> None:
+        self.channels: set[str] = set()
+
+    def publish(self, channel: str, image: np.ndarray) -> None:
+        self.channels.add(channel)
+
+
+def test_only_a_camera_a_browser_films_for_takes_pictures_from_outside(cfg, monkeypatch):
+    monkeypatch.setattr(service, "Camera", lambda url, reconnect_s, loop: FakeSource(url))
+    vision = _vision(cfg, monkeypatch)
+    vision.preview = FakePreview()
+    vision._apply([CameraSpec(1, "Tablet", "browser://ab12", analysis=""),
+                   CameraSpec(2, "No pátio", "rtsp://cam/1", analysis="")])
+    jpeg = cv2.imencode(".jpg", np.zeros((60, 80, 3), np.uint8))[1].tobytes()
+    assert isinstance(vision._sources["browser://ab12"], PushedCamera)
+    assert vision.receive_frame("cam1", jpeg)
+    assert not vision.receive_frame("cam2", jpeg)  # an IP camera's picture can't be replaced
+    assert not vision.receive_frame("cam3", jpeg)  # stopped, or no such camera
+    assert not vision.receive_frame("cam1", b"not a picture")
+    vision._apply([])
+    assert not vision.receive_frame("cam1", jpeg)
+
+
+def test_a_picture_from_a_browser_reaches_the_camera_as_a_frame(cfg, monkeypatch):
+    vision = _vision(cfg, monkeypatch)
+    vision.preview = FakePreview()
+    vision._apply([CameraSpec(1, "Tablet", "browser://ab12", analysis="")])
+    worker = vision._workers[1]
+    assert worker.status["online"] is False
+    assert vision.receive_frame("cam1", cv2.imencode(".jpg", np.zeros((60, 80, 3), np.uint8))[1].tobytes())
+    deadline = time.monotonic() + 2
+    while worker.status["online"] is False and time.monotonic() < deadline:
+        time.sleep(0.01)
+    status = worker.status
+    vision._apply([])
+    assert status["online"] is True and status["size"] == "80x60"
+    assert "cam1" in vision.preview.channels
+
+
+def test_the_web_ui_hands_over_pictures_through_the_local_port(cfg):
+    received = []
+
+    def receive(channel: str, jpeg: bytes) -> bool:
+        received.append((channel, jpeg))
+        return channel == "cam1"
+
+    preview = PreviewServer("127.0.0.1", cfg.preview.port, receive)
+    preview.start()
+    client = VisionClient(cfg.preview)
+    taken, refused = client.send_frame("cam1", b"picture"), client.send_frame("cam2", b"picture")
+    preview.stop()
+    assert taken and not refused
+    assert received == [("cam1", b"picture"), ("cam2", b"picture")]
+
+
+def test_handing_over_a_picture_fails_quietly_without_the_service(cfg):
+    assert not VisionClient(cfg.preview).send_frame("cam1", b"picture")

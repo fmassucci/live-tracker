@@ -33,6 +33,16 @@ class VisionClient:
         except OSError:
             return None
 
+    def send_frame(self, channel: str, jpeg: bytes) -> bool:
+        """Hands over a picture a browser took; False when no camera there takes it."""
+        request = urllib.request.Request(f"{self._base}/{channel}.jpg", data=jpeg,
+                                         headers={"Content-Type": "image/jpeg"})
+        try:
+            with urllib.request.urlopen(request, timeout=3.0):
+                return True
+        except OSError:
+            return False
+
     def stream(self, channel: str) -> Iterator[bytes] | None:
         """The channel's MJPEG stream as raw chunks, or None when it isn't available."""
         try:

@@ -102,7 +102,7 @@ class FakeSource:
 
 
 def test_a_camera_runs_fire_and_smoke_or_falls_and_records_with_that_model(cfg, monkeypatch):
-    monkeypatch.setattr(service, "PreviewServer", lambda host, port: None)
+    monkeypatch.setattr(service, "PreviewServer", lambda host, port, receive: None)
     vision = VisionService(cfg)
     monkeypatch.setattr(vision, "make_fire_detector", lambda: FakeDetector([]))
     monkeypatch.setattr(vision, "make_fall_detector", lambda: FakeDetector([]))
