@@ -24,7 +24,7 @@
 
   <div class="field">
     <label for="fire_seconds">{{ t("Minimum time in the picture") }}</label>
-    <span class="with-unit"><input type="number" id="fire_seconds" name="fire_seconds" min="0" max="600" step="1" value="{{ fire.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+    <span class="with-unit"><input type="number" id="fire_seconds" name="fire_seconds" min="0" max="600" step="0.1" value="{{ '%g' | format(fire.min_seconds | round(1)) }}"><span>{{ t("seconds") }}</span></span>
     <span class="hint">{{ t("Only counts fire or smoke that stays at least this long, so a flame or a puff of steam passing by isn't recorded.") }}</span>
   </div>
 

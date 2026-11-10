@@ -14,7 +14,7 @@
 
   <div class="field">
     <label for="falls_seconds">{{ t("Minimum time on the floor") }}</label>
-    <span class="with-unit"><input type="number" id="falls_seconds" name="falls_seconds" min="0" max="600" step="1" value="{{ falls.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+    <span class="with-unit"><input type="number" id="falls_seconds" name="falls_seconds" min="0" max="600" step="0.1" value="{{ '%g' | format(falls.min_seconds | round(1)) }}"><span>{{ t("seconds") }}</span></span>
     <span class="hint">{{ t("Someone bending down to pick something up is back on their feet within seconds; someone who fell stays down.") }}</span>
   </div>
 

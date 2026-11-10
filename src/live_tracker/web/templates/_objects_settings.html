@@ -4,7 +4,8 @@
 {# A kind's name inside the sentence: "pessoa", "celular"; a name like "TV" stays as it is. #}
 {% macro in_sentence(key) %}{% set name = t(things[key]) %}{{ name[:1].lower() ~ name[1:] if name[1:2].islower() else name }}{% endmacro %}
 {% set names = [] %}{% for key in objects.kinds %}{% set _ = names.append(in_sentence(key)) %}{% endfor %}
-{% set seconds = objects.min_seconds | int %}
+{% set seconds = objects.min_seconds | round(1) %}
+{% set seconds_text = (seconds | int) | string if seconds == seconds | int else t.number(seconds, 1) %}
 {% set templates = {
   "appear": t("Records {kinds} after {seconds} s in the picture."),
   "appear-now": t("Records {kinds} as soon as they appear."),
@@ -18,7 +19,7 @@
 {% set mode = form.record_mode if form.record_mode in ("interval", "daily") else "appear" %}
 {% set mode = "interval-back" if mode == "interval" and not form.record_while_present else mode %}
 {% set template = templates[mode ~ ("" if seconds else "-now")]
-     .replace("{seconds} ", seconds ~ "\u00a0").replace("{seconds}", seconds | string)
+     .replace("{seconds} ", seconds_text ~ "\u00a0").replace("{seconds}", seconds_text)
      .replace("{every}", form.every_value ~ "\u00a0" ~ form.every_unit) %}
 <div class="model-settings model-settings-objects" data-objects data-templates='{{ templates | tojson }}'
      data-and="{{ t('and') }}" data-none="{{ t('Choose at least one thing to look for.') }}">

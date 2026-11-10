@@ -185,6 +185,10 @@ def test_the_camera_page_reads_its_settings_back_as_one_sentence(client, cfg, mo
     rule = "Registra <strong>pessoa</strong>, <strong>celular</strong> e <strong>TV</strong> depois de 3\u00a0s na imagem."
     assert rule in edit
     assert 'name="confidence" value="0.35" checked' in edit  # Finds more
+    client.post("/cameras/1", data={**fields, "min_seconds": "0.5", "kinds": ["dog"]})  # less than a second
+    edit = client.get("/cameras/1").text
+    assert "Registra <strong>cachorro</strong> depois de 0,5 s na imagem." in edit
+    assert 'name="min_seconds" min="0" max="600" step="0.1" value="0.5"' in edit
     client.post("/cameras/1", data={**fields, "min_seconds": "0", "kinds": ["dog"]})
     assert "Registra <strong>cachorro</strong> ao aparecer na imagem." in client.get("/cameras/1").text
     refused = client.post("/cameras/1", data=fields)  # nothing ticked

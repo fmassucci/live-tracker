@@ -168,7 +168,12 @@ def test_the_camera_form_keeps_fire_and_falls_settings(client, cfg, monkeypatch)
     with client.app.state.services.db.session() as session:
         stored = json.loads(session.get(Camera, 1).model_settings)
     assert stored == {"kinds": ["fall"], "confidence": 0.5, "min_seconds": 20.0, "fps": 2.0}
-    assert 'name="falls_seconds" min="0" max="600" step="1" value="20"' in client.get("/cameras/1").text
+    assert 'name="falls_seconds" min="0" max="600" step="0.1" value="20"' in client.get("/cameras/1").text
+    client.post("/cameras/1", data={"name": "Cozinha", "url": "0", "analysis": "fire", "device": "", "kinds": ["fire"],
+                                    "fire_seconds": "0.5"})
+    with client.app.state.services.db.session() as session:
+        assert json.loads(session.get(Camera, 1).model_settings)["min_seconds"] == 0.5
+    assert 'name="fire_seconds" min="0" max="600" step="0.1" value="0.5"' in client.get("/cameras/1").text
 
 
 MODELS = Path("models")

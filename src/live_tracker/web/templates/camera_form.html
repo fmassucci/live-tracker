@@ -144,7 +144,7 @@
       <p class="hint only-faces">{{ t("Faces that aren't recognized are always recorded, at every visit: each can be someone else.") }}</p>
       <div class="field only-objects record-time">
         <label for="min_seconds">{{ t("Minimum time in the picture") }}</label>
-        <span class="with-unit"><input type="number" id="min_seconds" name="min_seconds" min="0" max="600" step="1" value="{{ objects.min_seconds | int }}"><span>{{ t("seconds") }}</span></span>
+        <span class="with-unit"><input type="number" id="min_seconds" name="min_seconds" min="0" max="600" step="0.1" value="{{ '%g' | format(objects.min_seconds | round(1)) }}"><span>{{ t("seconds") }}</span></span>
         <span class="hint">{{ t("Only counts what stays at least this long, so things passing by aren't recorded.") }}</span>
       </div>
     </section>

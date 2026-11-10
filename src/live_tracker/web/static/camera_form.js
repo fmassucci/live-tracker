@@ -9,6 +9,8 @@
   const MIN_EVERY_S = 5; // as recording.py
   const MAX_EVERY_S = 24 * 3600;
   const PHOTO_MB = 0.25; // a record's photo and its thumbnail, about
+  const numbers = new Intl.NumberFormat(document.documentElement.lang);
+  const tenths = new Intl.NumberFormat(document.documentElement.lang, { maximumFractionDigits: 1 });
 
   const interval = () => {
     const value = Number(field("every_value")?.value);
@@ -35,13 +37,13 @@
       rule.textContent = panel.dataset.none;
       return;
     }
-    const wait = Math.max(0, Math.round(Number(field("min_seconds")?.value) || 0));
+    const wait = Math.max(0, Math.round((Number(field("min_seconds")?.value) || 0) * 10) / 10); // tenths, as the field
     let mode = ["interval", "daily"].includes(field("record_mode")?.value) ? field("record_mode").value : "appear";
     if (mode === "interval" && field("record_while_present")?.checked === false) mode = "interval-back";
     const every = interval();
     const text = templates[wait ? mode : `${mode}-now`]
-      .replace("{seconds} ", `${wait}\u00a0`) // "2 s" stays on one line
-      .replace("{seconds}", String(wait))
+      .replace("{seconds} ", `${tenths.format(wait)}\u00a0`) // "0,5 s" stays on one line
+      .replace("{seconds}", tenths.format(wait))
       .replace("{every}", `${every.value || 0}\u00a0${every.unit}`);
     const [before, after] = text.split("{kinds}");
     const parts = [before];
@@ -95,8 +97,6 @@
 
   // When to record: what an interval adds up to in a day, for each person or kind of thing that stays
   const volume = form.querySelector("[data-volume]");
-  const numbers = new Intl.NumberFormat(document.documentElement.lang);
-  const tenths = new Intl.NumberFormat(document.documentElement.lang, { maximumFractionDigits: 1 });
 
   const writeVolume = () => {
     const { seconds } = interval();
