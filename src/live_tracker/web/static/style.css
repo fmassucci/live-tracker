@@ -444,6 +444,10 @@ form:not(:has(input[name="source"][value="browser"]:checked)) .only-own-camera {
   transition: box-shadow 220ms ease;
 }
 .video > img { width: 100%; height: 100%; object-fit: contain; }
+.region-layer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+.region-box { position: absolute; border: 2px solid var(--orange); background: color-mix(in srgb, var(--orange) 18%, transparent); box-shadow: 0 0 0 100vmax rgba(10, 12, 16, 0.5); } /* the shadow, clipped by the frame, dims the part the AI ignores */
+.region-tools { display: grid; gap: 8px; justify-items: start; }
+.region-tools .hint { margin: 0; }
 .video[data-tone="ok"] { box-shadow: 0 0 0 3px var(--ok-dot), 0 0 56px -8px var(--ok-dot); }
 .video[data-tone="bad"] { box-shadow: 0 0 0 3px var(--bad), 0 0 56px -8px var(--bad); }
 .video[data-tone="adjust"] { box-shadow: 0 0 0 3px var(--caution); }

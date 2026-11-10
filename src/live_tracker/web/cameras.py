@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from live_tracker import onvif
-from live_tracker.camera import crop, is_browser, new_browser_source, probe, redact
+from live_tracker.camera import crop, is_browser, new_browser_source, probe, redact, region_text
 from live_tracker.db import CAMERAS_VERSION, Camera, Device, audit, bump, get_setting
 from live_tracker.falls import FallSettings
 from live_tracker.fire import NAMES as FIRE_NAMES
@@ -130,7 +130,8 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
         camera = _get(session, camera_id)
     form = {"name": camera.name, "source": FILMS_ITSELF if is_browser(camera.url) else "address",
             "url": _shown_address(camera.url), "analysis": camera.analysis,
-            "output_id": camera.output_id, "part": camera.part, "record_mode": camera.record_mode,
+            "output_id": camera.output_id, "part": camera.part, "analysis_region": camera.analysis_region,
+            "record_mode": camera.record_mode,
             "record_while_present": camera.record_while_present, **_every_fields(camera.record_every_s)}
     return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                 objects=ObjectSettings.parse(camera.model_settings), **_other_settings(camera), error="",
@@ -140,7 +141,8 @@ def camera_edit(request: Request, camera_id: int) -> HTMLResponse:
 @router.post("/cameras/{camera_id}", response_model=None)
 def camera_update(
     request: Request, camera_id: int, name: str = Form(""), source: str = Form("address"), url: str = Form(""),
-    analysis: str = Form(""), output_id: str = Form(""), part: str | None = Form(None), kinds: list[str] = Form([]),
+    analysis: str = Form(""), output_id: str = Form(""), part: str | None = Form(None),
+    analysis_region: str = Form(""), kinds: list[str] = Form([]),
     confidence: float = Form(0.5), min_seconds: float = Form(2.0), fps: float = Form(4.0),
     objects_model: str = Form(""), record_mode: str = Form(APPEAR), every_value: str = Form(""),
     every_unit: str = Form("min"), record_while_present: bool = Form(False),
@@ -154,19 +156,21 @@ def camera_update(
         camera = _get(session, camera_id)
         address = _address(source, _keep_password(camera, url), camera.url)
         part = camera.part if part not in PARTS else part  # the choice is only shown for a camera already split
+        region = region_text(analysis_region)
         analyses = _analyses(request, camera.analysis)
         error = (_camera_error(name, address, analysis in analyses) or output_error
                  or _objects_error(analysis, kinds) or _fire_error(analysis, others)
                  or _record_error(record_mode, every_s))
         if error:
             form = {"name": name, "source": source, "url": _shown_address(address), "analysis": analysis,
-                    "output_id": output,
-                    "part": part, "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
+                    "output_id": output, "part": part, "analysis_region": region,
+                    "record_mode": record_mode, "every_value": every_value, "every_unit": every_unit,
                     "record_while_present": record_while_present}
             return page(request, "camera_form.html", section="cameras", camera=camera, form=form, parts=PARTS,
                         objects=_as_ticked(objects, kinds), **others, error=error, status_code=400,
                         **_live(request, camera), **_choices(request, analyses))
         camera.name, camera.url, camera.part = name.strip(), address.strip(), part
+        camera.analysis_region = region
         camera.analysis, camera.output_id = analysis, output
         camera.record_mode, camera.record_every_s = record_mode, every_s or camera.record_every_s
         camera.record_while_present = record_while_present

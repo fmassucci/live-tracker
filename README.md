@@ -130,6 +130,9 @@ this computer, set `[web] host = "127.0.0.1"`. The recognition screen's address 
    `rtsp://admin:PASSWORD@IP:554/onvif1` (write a `#` in the password as `%23`), and the network search may
    not list it. A dual-lens Jortan sends both lenses in one picture, one above the other: *Split into two
    cameras*, on the camera's edit page, makes one camera for each lens.
+   To have the AI look at only part of a camera's view, drag a box on its live image on the edit page: the
+   whole picture is still shown and recorded, but recognition only runs inside the box. *Analyse the whole
+   picture* clears it.
    A tablet or phone can be camera and screen at once: see [A tablet as camera and screen](#a-tablet-as-camera-and-screen).
 2. **People:** add each person with 3 to 5 face photos. Each photo is checked as soon as it is chosen. Photos
    taken by the camera that recognizes them (*Take photos with a camera*) match best. Photos require confirming that the

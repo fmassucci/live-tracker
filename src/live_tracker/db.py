@@ -56,6 +56,9 @@ class Camera(Base):
     output_id: Mapped[int | None] = mapped_column(ForeignKey("device_outputs.id", ondelete="SET NULL"))
     # "": the whole picture. "top" or "bottom": one lens of a two-lens camera that sends both in one picture.
     part: Mapped[str] = mapped_column(String(10), default="", server_default="")
+    # The part of the picture the AI looks at, as "x,y,w,h" in fractions (camera.parse_region); "" is the whole.
+    # The whole picture is still shown and recorded; only what the models see is cropped to this.
+    analysis_region: Mapped[str] = mapped_column(String(40), default="", server_default="")
     # The analysis's own settings, as JSON: for "objects", the kinds of things to record (objects.ObjectSettings).
     model_settings: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     # When to keep a photo of what the model finds (recording.RecordRule): "appear", each time it appears;

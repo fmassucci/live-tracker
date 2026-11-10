@@ -4,8 +4,19 @@ import threading
 
 import cv2
 import numpy as np
+import pytest
 
-from live_tracker.camera import Frame, PushedCamera, is_browser, new_browser_source, part_of, probe
+from live_tracker.camera import (
+    Frame,
+    PushedCamera,
+    is_browser,
+    masked,
+    new_browser_source,
+    parse_region,
+    part_of,
+    probe,
+    region_text,
+)
 
 SDP = ("v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=Camera\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n"
        "m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=control:trackID=0\r\n")
@@ -71,6 +82,34 @@ def test_each_lens_of_a_two_lens_picture_is_one_half():
     assert top.seq == bottom.seq == 7
     assert top.signature != bottom.signature  # a lens that freezes is noticed on its own
     assert part_of(frame, "") is frame
+
+
+def test_an_analysis_region_blacks_out_everything_outside_it():
+    image = np.full((1000, 2000, 3), 200, np.uint8)  # the whole picture is bright
+    frame = Frame(image, seq=3, captured_at=1.0, signature=b"whole")
+    scene = masked(frame, "0.5,0.25,0.25,0.5")  # x 0.5-0.75, y 0.25-0.75: cols 1000-1500, rows 250-750
+    assert scene.image.shape == image.shape  # same size, so boxes still line up with the whole picture
+    assert scene.image[500, 1200].tolist() == [200, 200, 200]  # inside the region: the real picture
+    assert scene.image[500, 100].max() == 0 and scene.image[50, 1200].max() == 0  # outside: black
+    assert scene.seq == 3 and scene.signature != frame.signature
+
+
+def test_the_whole_picture_or_a_bad_region_is_left_alone():
+    frame = Frame(np.full((100, 100, 3), 7, np.uint8), seq=1, captured_at=1.0, signature=b"whole")
+    assert masked(frame, "") is frame
+    assert masked(frame, "0,0,1,1") is frame  # the whole picture
+    assert masked(frame, "nonsense") is frame
+    assert masked(frame, "0.1,0.1") is frame  # too few numbers
+
+
+def test_a_region_is_parsed_clamped_and_cleaned_up():
+    assert parse_region("0.25,0.1,0.5,0.8") == (0.25, 0.1, 0.5, 0.8)
+    assert parse_region("") is None and parse_region("0,0,1,1") is None
+    assert parse_region("-0.2,0,0.5,0.5") == (0.0, 0.0, 0.5, 0.5)  # clamped into the picture
+    assert parse_region("0.8,0,0.5,0.5") == (0.8, 0.0, pytest.approx(0.2), 0.5)  # width trimmed to the edge
+    assert parse_region("0.1,0.1,0,0.5") is None  # no width
+    assert region_text("0.25,0.1,0.5,0.8") == "0.2500,0.1000,0.5000,0.8000"
+    assert region_text("whatever") == "" and region_text("0,0,1,1") == ""
 
 
 def _jpeg(color: tuple[int, int, int]) -> bytes:

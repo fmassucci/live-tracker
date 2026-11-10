@@ -17,7 +17,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from live_tracker.camera import Camera, Frame, PushedCamera, is_browser, part_of
+from live_tracker.camera import Camera, Frame, PushedCamera, is_browser, masked, part_of
 from live_tracker.config import Config
 from live_tracker.db import (
     CAMERAS_VERSION, DEVICES_VERSION, FACES_VERSION, MODELS_VERSION, STOP_REQUESTS, Database, get_setting,
@@ -66,6 +66,7 @@ class CameraSpec:
     url: str
     output_id: int | None = None  # the device output it switches for someone with access (DeviceOutput.id)
     part: str = ""  # "": the whole picture; "top" or "bottom": one lens of a two-lens camera
+    region: str = ""  # "x,y,w,h" in fractions: the models only look here, the whole picture is still shown
     analysis: str = "faces"  # what runs on the picture: "faces", "objects", "fire", "falls", or "" for nothing
     settings: str = "{}"  # the analysis's own settings, as JSON (Camera.model_settings)
     record_mode: str = APPEAR  # when a photo of what the model finds is kept (recording.RecordRule)
@@ -142,7 +143,9 @@ class CameraWorker:
             frame = part_of(frame, self.spec.part)
             if repeats.skip(frame):
                 continue
-            result = self.analyzer.process(frame, repeats.frozen(frame)) if self.analyzer else Result()
+            # The whole frame is shown and recorded; the models only see inside the analysis region.
+            scene = masked(frame, self.spec.region)
+            result = self.analyzer.process(scene, repeats.frozen(frame)) if self.analyzer else Result()
             if result.decision:
                 keep = self.gate.allow(decision_subject(result.decision.kind, result.decision.person))
                 self._service.on_decision(self.spec, frame, result, keep=keep)
@@ -350,8 +353,8 @@ class VisionService:
                 else:
                     rows = session.scalars(select(CameraRow).where(CameraRow.enabled).order_by(CameraRow.id))
                     specs = [CameraSpec(c.id, c.name, c.url, output_id=c.output_id, part=c.part,
-                                        analysis=c.analysis, settings=c.model_settings, record_mode=c.record_mode,
-                                        record_every_s=c.record_every_s,
+                                        region=c.analysis_region, analysis=c.analysis, settings=c.model_settings,
+                                        record_mode=c.record_mode, record_every_s=c.record_every_s,
                                         record_while_present=c.record_while_present) for c in rows]
                 self._apply(specs)
             if versions[DEVICES_VERSION] != self._versions.get(DEVICES_VERSION):

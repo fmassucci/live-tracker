@@ -15,6 +15,7 @@
 <div class="camera-layout">
   <form method="post" action="{{ '/cameras/' ~ camera.id if camera else '/cameras/new' }}" class="panel camera-settings">
     <input type="hidden" name="camera_id" value="{{ camera.id if camera else '' }}">
+    {% if camera %}<input type="hidden" name="analysis_region" value="{{ form.analysis_region or '' }}" data-region-input>{% endif %}
 
     <section class="settings-part" aria-labelledby="part-video">
       <h2 id="part-video">{{ t("Video") }}</h2>
@@ -187,12 +188,17 @@
       </div>
       {% else %}
       <img src="/cameras/{{ camera.id }}/stream" data-stream-for="{{ camera.id }}" alt="{{ t('Live image from {name}', name=camera.name) }}">
+      <div class="region-layer" data-region-overlay aria-hidden="true"><div class="region-box" data-region-rect hidden></div></div>
       {% endif %}
       {% if state %}<div class="video-chips">{{ camera_chip(state, t(recording_states[state]), "glass", camera.id) }}</div>{% endif %}
     </div>
     {% if camera_status.size %}
     <p class="monitor-facts"><span>{{ camera_status.size }}</span><span>{{ t("{fps} fps", fps=t.number(camera_status.fps or 0, 0)) }}</span></p>
     {% endif %}
+    <div class="region-tools" data-region-tools hidden>
+      <p class="hint" data-region-note>{{ t("Drag on the image to pick the area the AI analyses. The whole picture is still shown and recorded; only recognition is limited to the area.") }}</p>
+      <button type="button" class="button button-quiet" data-region-clear hidden>{{ t("Analyse the whole picture") }}</button>
+    </div>
     <p class="hint">{{ t("Changes show here after you save.") }}</p>
   </aside>
   {% else %}

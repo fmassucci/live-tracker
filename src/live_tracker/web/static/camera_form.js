@@ -127,3 +127,67 @@
   form.addEventListener("change", refresh);
   refresh();
 })();
+
+// Analysis region: drag a box on the live image to limit where the AI looks. The whole frame is still shown
+// and recorded; only recognition is cropped to the box. Stored as "x,y,w,h" in fractions (camera.parse_region).
+(() => {
+  const input = document.querySelector("[data-region-input]");
+  const overlay = document.querySelector("[data-region-overlay]");
+  const rect = document.querySelector("[data-region-rect]");
+  const tools = document.querySelector("[data-region-tools]");
+  const clear = document.querySelector("[data-region-clear]");
+  if (!input || !overlay || !rect) return;
+  if (tools) tools.hidden = false; // the live image is on the page, so a box can be drawn
+  const MIN = 0.02; // a box smaller than this, in either direction, means the whole picture
+  const clamp = (n) => Math.min(Math.max(n, 0), 1);
+
+  const parse = (text) => {
+    const parts = (text || "").split(",").map(Number);
+    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n)) || parts[2] <= 0 || parts[3] <= 0) return null;
+    return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+  };
+
+  const draw = (box) => {
+    rect.hidden = !box;
+    if (clear) clear.hidden = !box;
+    if (!box) return;
+    rect.style.left = `${box.x * 100}%`;
+    rect.style.top = `${box.y * 100}%`;
+    rect.style.width = `${box.w * 100}%`;
+    rect.style.height = `${box.h * 100}%`;
+  };
+
+  const store = (box) => {
+    input.value = box ? [box.x, box.y, box.w, box.h].map((n) => n.toFixed(4)).join(",") : "";
+    draw(box);
+  };
+
+  const at = (event) => {
+    const bounds = overlay.getBoundingClientRect();
+    return { x: clamp((event.clientX - bounds.left) / bounds.width), y: clamp((event.clientY - bounds.top) / bounds.height) };
+  };
+
+  const boxFrom = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
+
+  let start = null;
+  store(parse(input.value));
+
+  overlay.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    overlay.setPointerCapture(event.pointerId);
+    start = at(event);
+    draw(boxFrom(start, start));
+  });
+  overlay.addEventListener("pointermove", (event) => {
+    if (start) draw(boxFrom(start, at(event)));
+  });
+  overlay.addEventListener("pointerup", (event) => {
+    if (!start) return;
+    const box = boxFrom(start, at(event));
+    start = null;
+    store(box.w < MIN || box.h < MIN ? null : box);
+  });
+  overlay.addEventListener("pointercancel", () => { start = null; store(parse(input.value)); });
+  if (clear) clear.addEventListener("click", () => store(null));
+})();

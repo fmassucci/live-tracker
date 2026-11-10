@@ -92,6 +92,45 @@ def part_of(frame: Frame, part: str) -> Frame:
     return Frame(image, frame.seq, frame.captured_at, _signature(image))
 
 
+def parse_region(region: str) -> tuple[float, float, float, float] | None:
+    """A rectangle (x, y, w, h) in fractions of the picture (0 to 1), or None for the whole picture.
+
+    Out-of-range values are clamped; the whole picture, an empty box or anything unparseable is None.
+    """
+    try:
+        x, y, w, h = (float(n) for n in region.split(","))
+    except (ValueError, AttributeError):
+        return None
+    x, y = min(max(x, 0.0), 1.0), min(max(y, 0.0), 1.0)
+    w, h = min(max(w, 0.0), 1.0 - x), min(max(h, 0.0), 1.0 - y)
+    if w <= 0.0 or h <= 0.0 or (x, y, w, h) == (0.0, 0.0, 1.0, 1.0):
+        return None
+    return x, y, w, h
+
+
+def region_text(region: str) -> str:
+    """The region cleaned up for storage, or "" for the whole picture."""
+    box = parse_region(region)
+    return "" if box is None else ",".join(f"{value:.4f}" for value in box)
+
+
+def masked(frame: Frame, region: str) -> Frame:
+    """The frame with everything outside `region` blacked out, so the AI only looks inside it.
+
+    The picture shown and recorded stays the whole frame; only the copy the models see is masked, and it keeps
+    the frame's size, so boxes the models find still line up with the whole picture.
+    """
+    box = parse_region(region)
+    if box is None:
+        return frame
+    height, width = frame.image.shape[:2]
+    x0, y0 = round(box[0] * width), round(box[1] * height)
+    x1, y1 = round((box[0] + box[2]) * width), round((box[1] + box[3]) * height)
+    image = np.zeros_like(frame.image)
+    image[y0:y1, x0:x1] = frame.image[y0:y1, x0:x1]
+    return Frame(image, frame.seq, frame.captured_at, _signature(image))
+
+
 def _signature(image: np.ndarray) -> bytes:
     return hashlib.blake2b(image[::8, ::8].tobytes(), digest_size=16).digest()
 

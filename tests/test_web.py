@@ -532,6 +532,22 @@ def test_a_two_lens_camera_can_be_split_into_one_camera_per_lens(client, app):
     assert "Separar em duas câmeras" not in edit and "Metade de cima" in edit
 
 
+def test_a_camera_analyses_only_the_region_drawn_on_it(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(name="Estacionamento", url="0", analysis="faces"))
+    client.post("/cameras/1", data={"name": "Estacionamento", "url": "0", "analysis": "faces",
+                                    "analysis_region": "0.5,0.25,0.25,0.5"})
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, 1).analysis_region == "0.5000,0.2500,0.2500,0.5000"  # cleaned up
+    assert 'value="0.5000,0.2500,0.2500,0.5000" data-region-input' in client.get("/cameras/1").text
+    # the whole picture, or a nonsense box, clears it: the AI looks at everything again
+    for region in ("0,0,1,1", "banana"):
+        client.post("/cameras/1", data={"name": "Estacionamento", "url": "0", "analysis": "faces",
+                                        "analysis_region": region})
+        with app.state.services.db.session() as session:
+            assert session.get(Camera, 1).analysis_region == ""
+
+
 def test_open_pages_can_follow_every_camera(client, app):
     with app.state.services.db.session() as session:
         session.add(Camera(name="Porta", url="0"))
