@@ -127,13 +127,43 @@ def test_adding_a_person_with_a_photo(client):
     ok, png = cv2.imencode(".png", np.full((480, 480, 3), 128, np.uint8) + np.random.default_rng(1).integers(0, 60, (480, 480, 3)).astype(np.uint8))
     response = client.post(
         "/people/new",
-        data={"name": "João da Silva", "category": "employee", "job_title": "Padeiro", "access": "true", "informed": "true"},
+        data={"name": "João da Silva", "category": "employee", "job_title": "Padeiro", "registration": "1042",
+              "access": "true", "informed": "true"},
         files=[("photos", ("joao.png", png.tobytes(), "image/png"))],
     )
     assert response.status_code == 200
     assert "João da Silva" in response.text and "Fotos salvas: 1." in response.text
+    assert "Matrícula 1042" in response.text
     assert "Pronta para ser reconhecida" not in response.text  # one photo is not enough yet
     assert "Reconhecida; mais fotos deixam mais seguro" in response.text
+
+
+def test_a_registration_number_is_saved_searched_and_never_repeated(client, app):
+    client.post("/people/new", data={"name": "Ana", "category": "employee", "registration": "1042"})
+    with app.state.services.db.session() as session:
+        assert session.scalars(select(Person).where(Person.name == "Ana")).one().registration == "1042"
+
+    client.post("/people/new", data={"name": "Bruno", "category": "employee", "registration": "77"})
+    found = client.get("/people", params={"q": "1042"})
+    assert "Ana" in found.text and "Bruno" not in found.text  # the number finds the person, like the name does
+
+    repeated = client.post("/people/new", data={"name": "Bruno", "category": "employee", "registration": "1042"})
+    assert repeated.status_code == 400 and "Outra pessoa já tem esta matrícula." in repeated.text
+
+
+def test_a_person_keeps_their_own_registration_number_when_edited(client, app):
+    client.post("/people/new", data={"name": "Ana", "category": "employee", "registration": "1042"})
+    with app.state.services.db.session() as session:
+        person_id = session.scalars(select(Person).where(Person.name == "Ana")).one().id
+    response = client.post(
+        f"/people/{person_id}",
+        data={"name": "Ana Maria", "category": "employee", "registration": "1042", "active": "true"},
+        follow_redirects=True,
+    )
+    assert "Alterações salvas." in response.text
+    with app.state.services.db.session() as session:
+        person = session.get(Person, person_id)
+    assert (person.name, person.registration) == ("Ana Maria", "1042")
 
 
 def test_photos_need_the_lgpd_confirmation(client):

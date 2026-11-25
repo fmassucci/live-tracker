@@ -16,6 +16,11 @@
   <span class="hint">{{ t("For example: baker, cashier, delivery.") }}</span>
 </div>
 <div class="field">
+  <label for="registration">{{ t("Registration number") }}</label>
+  <input type="text" id="registration" name="registration" value="{{ form.registration or '' }}" maxlength="40" autocomplete="off">
+  <span class="hint">{{ t("The number the company already uses for this person. Optional, and no two people share one.") }}</span>
+</div>
+<div class="field">
   <label for="notes">{{ t("Notes") }}</label>
   <textarea id="notes" name="notes">{{ form.notes or '' }}</textarea>
 </div>

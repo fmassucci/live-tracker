@@ -13,8 +13,8 @@
 <form class="toolbar" method="get" action="/people" role="search">
   <div class="search">
     {{ icon("search") }}
-    <label class="visually-hidden" for="q">{{ t("Search by name") }}</label>
-    <input type="search" id="q" name="q" value="{{ q }}" placeholder="{{ t('Search by name') }}">
+    <label class="visually-hidden" for="q">{{ t("Search by name or registration number") }}</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="{{ t('Search by name or registration number') }}">
   </div>
   <label class="check">
     <input type="checkbox" name="show" value="all" {% if show == 'all' %}checked{% endif %}>
@@ -31,7 +31,7 @@
     {{ avatar(avatars.get(p.id), p.name) }}
     <div>
       <a class="person-name" href="/people/{{ p.id }}">{{ p.name }}</a>
-      <p class="muted small">{{ t(categories[p.category]) }}{% if p.job_title %}, {{ p.job_title }}{% endif %}</p>
+      <p class="muted small">{{ t(categories[p.category]) }}{% if p.job_title %}, {{ p.job_title }}{% endif %}{% if p.registration %} · {{ t("Registration {number}", number=p.registration) }}{% endif %}</p>
     </div>
     <div>
       {% if count == 0 %}

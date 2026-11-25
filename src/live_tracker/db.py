@@ -83,6 +83,8 @@ class Person(Base):
     name: Mapped[str] = mapped_column(String(120))
     category: Mapped[str] = mapped_column(String(12), default="employee")  # "employee", "contractor" or "visitor"
     job_title: Mapped[str] = mapped_column(String(80), default="")
+    # The number the company already uses for them ("matrícula"); "" when they have none. No two people share one.
+    registration: Mapped[str] = mapped_column(String(40), default="", server_default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)  # recognized at all
     access: Mapped[bool] = mapped_column(Boolean, default=True)  # recognizing them switches the camera's device

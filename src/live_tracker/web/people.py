@@ -43,7 +43,8 @@ def people_list(request: Request, q: str = "", show: str = "active") -> HTMLResp
         if show != "all":
             query = query.where(Person.active)
         if q.strip():
-            query = query.where(Person.name.ilike(f"%{q.strip()}%"))
+            like = f"%{q.strip()}%"
+            query = query.where(Person.name.ilike(like) | Person.registration.ilike(like))
         people = session.scalars(query).all()
         photos = dict(session.execute(select(Photo.person_id, func.count()).group_by(Photo.person_id)).all())
         avatars = dict(session.execute(select(Photo.person_id, func.min(Photo.id)).group_by(Photo.person_id)).all())
@@ -70,25 +71,26 @@ def person_create(
     name: str = Form(""),
     category: str = Form("employee"),
     job_title: str = Form(""),
+    registration: str = Form(""),
     notes: str = Form(""),
     access: bool = Form(False),
     informed: bool = Form(False),
     photos: list[UploadFile] = File(default=[]),
 ) -> HTMLResponse | RedirectResponse:
     files = uploads(photos)
-    form = {"name": name, "category": category, "job_title": job_title, "notes": notes,
-            "access": access, "informed": informed}
-    error = _person_error(name, category) or (
-        "Confirm that the person was told how their face is used before adding photos."
-        if files and not informed else ""
-    )
-    if error:
-        return page(request, "person_new.html", section="people", form=form, error=error, status_code=400)
-
+    form = {"name": name, "category": category, "job_title": job_title, "registration": registration,
+            "notes": notes, "access": access, "informed": informed}
     s = services(request)
     with s.db.session() as session:
+        error = _person_error(name, category) or _registration_error(session, registration) or (
+            "Confirm that the person was told how their face is used before adding photos."
+            if files and not informed else ""
+        )
+        if error:
+            return page(request, "person_new.html", section="people", form=form, error=error, status_code=400)
         person = Person(
-            name=name.strip(), category=category, job_title=job_title.strip(), notes=notes.strip(),
+            name=name.strip(), category=category, job_title=job_title.strip(),
+            registration=registration.strip(), notes=notes.strip(),
             access=access, informed_at=datetime.now() if informed else None,
         )
         session.add(person)
@@ -130,7 +132,8 @@ def person_detail(request: Request, person_id: int) -> HTMLResponse:
             select(Camera).where(Camera.enabled).order_by(Camera.output_id.is_(None), Camera.name)
         ).all()
         camera_names = {c.id: c.name for c in session.scalars(select(Camera))}
-    form = {"name": person.name, "category": person.category, "job_title": person.job_title, "notes": person.notes,
+    form = {"name": person.name, "category": person.category, "job_title": person.job_title,
+            "registration": person.registration, "notes": person.notes,
             "access": person.access, "active": person.active}
     return page(
         request, "person.html", section="people", person=person, photos=photos, events=events, form=form,
@@ -146,19 +149,21 @@ def person_update(
     name: str = Form(""),
     category: str = Form("employee"),
     job_title: str = Form(""),
+    registration: str = Form(""),
     notes: str = Form(""),
     access: bool = Form(False),
     active: bool = Form(False),
     informed: bool = Form(False),
 ) -> RedirectResponse:
-    error = _person_error(name, category)
-    if error:
-        flash(request, error, "bad")
-        return RedirectResponse(f"/people/{person_id}#details", status_code=303)
     with services(request).db.session() as session:
         person = _get(session, person_id)
+        error = _person_error(name, category) or _registration_error(session, registration, person_id)
+        if error:
+            flash(request, error, "bad")
+            return RedirectResponse(f"/people/{person_id}#details", status_code=303)
         person.name, person.category = name.strip(), category
-        person.job_title, person.notes = job_title.strip(), notes.strip()
+        person.job_title, person.registration = job_title.strip(), registration.strip()
+        person.notes = notes.strip()
         person.access, person.active = access, active
         if informed and person.informed_at is None:
             person.informed_at = datetime.now()
@@ -303,6 +308,19 @@ def _person_error(name: str, category: str) -> str:
     if category not in CATEGORIES:
         return "Choose a type."
     return ""
+
+
+def _registration_error(session, registration: str, person_id: int | None = None) -> str:
+    """The registration number identifies the person, so no two people may share one. Empty is fine for everyone."""
+    number = registration.strip()
+    if not number:
+        return ""
+    if len(number) > 40:
+        return "The registration number is too long."
+    taken = select(Person.id).where(func.lower(Person.registration) == number.lower())
+    if person_id is not None:
+        taken = taken.where(Person.id != person_id)
+    return "Another person already has this registration number." if session.scalar(taken) else ""
 
 
 def _may_add_photos(request: Request, person: Person, informed: bool) -> bool:
