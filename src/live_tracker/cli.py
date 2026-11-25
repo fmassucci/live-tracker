@@ -227,6 +227,8 @@ def _start(cfg: Config, args: argparse.Namespace) -> int:
     missing = [command for command, answers in answering.items() if not answers()]
     if len(missing) == len(answering):  # nothing runs, so nothing has the database open
         rename_legacy_database(cfg)
+    if missing:
+        _migrate_once(cfg)
     starting = {}
     for command in missing:
         print(f"Starting the {names[command]}...")
@@ -245,6 +247,15 @@ def _start(cfg: Config, args: argparse.Namespace) -> int:
     print(f"Running at {here}. This window closes by itself; to stop the system, use Stop the system in Settings.")
     time.sleep(CLOSE_AFTER_S)
     return 0
+
+
+def _migrate_once(cfg: Config) -> None:
+    """Bring the database to the current version before starting anything, so a new database is migrated here
+    once instead of by the recognition service and the web UI at the same time. Both still migrate on their
+    own, for when they are started by hand; migrating here only leaves them nothing to do."""
+    from live_tracker.db import Database
+
+    Database(cfg.db_path).migrate()
 
 
 def _background(args: argparse.Namespace, command: str, logs: Path) -> tuple[subprocess.Popen, Path]:

@@ -1,4 +1,5 @@
 import socket
+import sqlite3
 import sys
 import time
 import webbrowser
@@ -13,6 +14,7 @@ from conftest import free_port
 
 from live_tracker import cli
 from live_tracker.cli import main
+from live_tracker.db import MIGRATIONS_DIR
 from live_tracker.preview import PreviewServer
 from live_tracker.service import VisionService
 from live_tracker.web.vision_client import VisionClient
@@ -154,6 +156,47 @@ def test_start_launches_both_in_the_background_and_opens_the_browser(tmp_path, c
     assert fake.started == ["run", "web"]
     assert fake.renamed == 1  # nothing ran, so nothing had the database open
     assert opened == [f"http://127.0.0.1:{port}"]
+
+
+def _head_revision() -> str:
+    from alembic.config import Config as AlembicConfig
+    from alembic.script import ScriptDirectory
+
+    config = AlembicConfig()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    return ScriptDirectory.from_config(config).get_current_head()
+
+
+def _version_in(db_path: Path) -> list[str]:
+    if not db_path.exists():
+        return []
+    with sqlite3.connect(db_path) as connection:
+        return [row[0] for row in connection.execute("select version_num from alembic_version")]
+
+
+def test_start_migrates_the_database_before_launching_anything(tmp_path, cfg, monkeypatch, launches):
+    """So a new database is migrated once, not by the recognition service and the web UI at the same time."""
+    monkeypatch.setattr(webbrowser, "open", lambda url: None)
+    fake = launches()
+    launch = cli._background
+    at_launch: list[list[str]] = []
+
+    def background(args, command: str, logs: Path):
+        at_launch.append(_version_in(cfg.db_path))
+        return launch(args, command, logs)
+
+    monkeypatch.setattr(cli, "_background", background)
+    assert main(["--config", _config_file(tmp_path, cfg, free_port()), "start"]) == 0
+    assert fake.started == ["run", "web"]
+    assert at_launch == [[_head_revision()], [_head_revision()]]  # both found it already up to date
+
+
+def test_start_does_not_touch_the_database_when_everything_runs(tmp_path, cfg, monkeypatch, launches):
+    monkeypatch.setattr(webbrowser, "open", lambda url: None)
+    fake = launches(running={"run", "web"})
+    assert main(["--config", _config_file(tmp_path, cfg, free_port()), "start"]) == 0
+    assert fake.started == []
+    assert not cfg.db_path.exists()
 
 
 def test_start_only_launches_what_is_not_running(tmp_path, cfg, monkeypatch, launches):

@@ -7,8 +7,10 @@ Times are the server's local time, which is what people at the bakery read.
 from __future__ import annotations
 
 import logging
+import sys
+import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +30,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+
+# How long to wait for another process to finish migrating before giving up: the first migration of a new
+# database, on a slow disk, takes seconds, but the models are downloaded on the same first start.
+MIGRATION_WAIT_S = 180.0
 
 # Settings rows bumped whenever something the recognition service has loaded changes.
 FACES_VERSION = "faces_version"
@@ -251,13 +257,19 @@ class Setting(Base):
 class Database:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
         self.url = f"sqlite:///{path.resolve().as_posix()}"
         self.engine = create_engine(self.url, connect_args={"check_same_thread": False})
         event.listen(self.engine, "connect", _sqlite_pragmas)
         self._sessions = sessionmaker(self.engine, expire_on_commit=False)
 
     def migrate(self) -> None:
-        """Create or upgrade the tables to the current version."""
+        """Create or upgrade the tables to the current version.
+
+        Only one process migrates at a time. The recognition service and the web UI are started together and
+        each migrates, so on a new database both would otherwise run the same migrations at once and the second
+        would fail on a column the first had just added. Whoever waits finds the database already up to date.
+        """
         logging.getLogger("alembic").setLevel(logging.WARNING)  # before importing it: it logs while loading
         from alembic import command
         from alembic.config import Config as AlembicConfig
@@ -265,13 +277,75 @@ class Database:
         alembic_cfg = AlembicConfig()
         alembic_cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
         alembic_cfg.set_main_option("sqlalchemy.url", self.url)
-        command.upgrade(alembic_cfg, "head")
+        with migration_lock(self.path):
+            command.upgrade(alembic_cfg, "head")
 
     @contextmanager
     def session(self) -> Iterator[Session]:
         """A session in a transaction: committed when the block ends, rolled back on errors."""
         with self._sessions() as session, session.begin():
             yield session
+
+
+@contextmanager
+def migration_lock(path: Path) -> Iterator[None]:
+    """Hold the one right to migrate this database, waiting for whoever has it.
+
+    The lock belongs to the operating system, on a file beside the database, so it is released even when the
+    process holding it is killed. A stale lock file is therefore harmless and is never deleted: deleting it
+    would take the lock away from a process still migrating.
+    """
+    lock_path = path.parent / f"{path.name}.migrate.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+b") as handle:
+        _take_lock(handle, lock_path)
+        try:
+            yield
+        finally:
+            _release_lock(handle)
+
+
+def _waited_too_long(deadline: float, lock_path: Path) -> None:
+    if time.monotonic() >= deadline:
+        raise TimeoutError(
+            f"another process has been migrating the database for over {MIGRATION_WAIT_S:.0f} s ({lock_path})"
+        )
+
+
+if sys.platform == "win32":
+    import msvcrt
+
+    def _take_lock(handle, lock_path: Path) -> None:
+        deadline = time.monotonic() + MIGRATION_WAIT_S
+        while True:
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)  # tries for about 10 s, then raises
+                return
+            except OSError:
+                _waited_too_long(deadline, lock_path)
+
+    def _release_lock(handle) -> None:
+        handle.seek(0)
+        with suppress(OSError):
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _take_lock(handle, lock_path: Path) -> None:
+        deadline = time.monotonic() + MIGRATION_WAIT_S
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except OSError:
+                _waited_too_long(deadline, lock_path)
+                time.sleep(0.2)
+
+    def _release_lock(handle) -> None:
+        with suppress(OSError):
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _sqlite_pragmas(connection, _record) -> None:
