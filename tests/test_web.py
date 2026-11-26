@@ -512,6 +512,18 @@ def test_a_camera_switches_a_devices_output(client, app):
     assert gone.status_code == 400 and "Essa saída foi removida" in gone.text
 
 
+def test_changing_a_camera_address_keeps_its_hidden_password(client, app):
+    with app.state.services.db.session() as session:
+        session.add(Camera(id=1, name="Porta", url="rtsp://admin:s3cret@192.168.1.50:554/onvif1"))
+    assert "rtsp://***@192.168.1.50:554/onvif1" in client.get("/cameras/1").text
+    client.post("/cameras/1", data={"name": "Porta", "url": "rtsp://***@192.168.1.50:554/onvif2"})
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, 1).url == "rtsp://admin:s3cret@192.168.1.50:554/onvif2"
+    client.post("/cameras/1", data={"name": "Porta", "url": "rtsp://admin:new@192.168.1.50:554/onvif2"})
+    with app.state.services.db.session() as session:
+        assert session.get(Camera, 1).url == "rtsp://admin:new@192.168.1.50:554/onvif2"
+
+
 def test_a_camera_can_be_stopped_and_started_from_its_settings(client, app):
     with app.state.services.db.session() as session:
         session.add(Camera(name="Porta", url="0"))

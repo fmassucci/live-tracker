@@ -482,8 +482,15 @@ def _taller_than_wide(status: dict | None) -> bool:
 
 
 def _keep_password(camera: Camera, url: str) -> str:
-    """The edit form shows the address without its password; unchanged, it means the stored address."""
-    return camera.url if url.strip() == redact(camera.url) else url
+    """The edit form shows the address with *** for its login: sent back, *** means the stored login.
+
+    The rest of the address may have changed, such as /onvif1 to /onvif2.
+    """
+    hidden = redact(camera.url)
+    login = camera.url[camera.url.find("//"):camera.url.find("@") + 1]  # "//user:password@"
+    if hidden == camera.url or "//***@" not in url:
+        return url
+    return url.replace("//***@", login, 1)
 
 
 def _with_login(url: str, user: str, password: str) -> str:
